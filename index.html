@@ -1,98 +1,344 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SilverTech Oregon</title>
-<style>
-  :root {
-    --fg: #00ff88;
-    --bg: #000;
-    --accent: #bdfcb5;
-  }
-  html, body {
-    margin: 0;
-    height: 100%;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: monospace;
-    overflow: hidden;
-  }
-  pre {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    font-size: 8px;
-    line-height: 0.6;
-    white-space: pre;
-    margin: 0;
-    text-align: center;
-    filter: drop-shadow(0 0 6px #00ff88);
-  }
-  .overlay {
-    position: absolute;
-    width: 100%;
-    text-align: center;
-    bottom: 10%;
-    color: var(--accent);
-    font-size: 1rem;
-  }
-  h1 {
-    color: var(--fg);
-    font-size: 1.5rem;
-    margin-bottom: 0.3rem;
-  }
-  p { margin: 0; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SilverTech Oregon</title>
+    <style>
+        /* --- Base Styles & Variables --- */
+        :root {
+            --bg-color: #000000;
+            --fg-color: #00ff88;
+            --glow-color: rgba(0, 255, 136, 0.4);
+            --overlay-text-color: #ffffff;
+            --button-bg: rgba(255, 255, 255, 0.1);
+            --button-border: #00ff88;
+            --button-text: #00ff88;
+        }
+
+        body.light-mode {
+            --bg-color: #eeeeee;
+            --fg-color: #003318;
+            --glow-color: rgba(0, 51, 24, 0.2);
+            --overlay-text-color: #000000;
+            --button-bg: rgba(0, 0, 0, 0.1);
+            --button-border: #003318;
+            --button-text: #003318;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            font-family: 'monospace', 'Courier New', Courier;
+        }
+
+        /* --- ASCII Art Container --- */
+        #ascii-art {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100vw;
+            height: auto;
+            text-align: center;
+            line-height: 0.9; /* Adjust for more square-like character aspect ratio */
+            white-space: pre;
+            font-weight: bold;
+            text-shadow: 
+                0 0 3px var(--fg-color), 
+                0 0 6px var(--fg-color), 
+                0 0 12px var(--glow-color);
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+        
+        /* --- Centered Overlay Text --- */
+        .overlay-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--overlay-text-color);
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: bold;
+            text-shadow: 0 0 10px var(--bg-color), 0 0 20px var(--bg-color);
+            pointer-events: none; /* Allows clicks to pass through */
+            z-index: 10;
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+
+        .overlay-text p {
+            margin: 0.2em 0;
+        }
+
+        .overlay-text .subtitle {
+            font-size: 0.6em;
+            opacity: 0.8;
+        }
+        
+        /* --- Color Invert Toggle Button (Stretch Goal) --- */
+        #color-toggle {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            padding: 8px 12px;
+            background-color: var(--button-bg);
+            border: 1px solid var(--button-border);
+            color: var(--button-text);
+            font-family: 'monospace', 'Courier New', Courier;
+            cursor: pointer;
+            z-index: 100;
+            border-radius: 4px;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        #color-toggle:hover {
+            background-color: var(--button-border);
+            color: var(--bg-color);
+        }
+
+        /* --- No-JS Fallback (Stretch Goal) --- */
+        .no-js-fallback {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+        }
+
+        .no-js-fallback img {
+            max-width: 80%;
+            max-height: 50vh;
+            filter: invert(1) brightness(0.8) sepia(1) hue-rotate(90deg) saturate(1000%);
+        }
+        
+        .light-mode .no-js-fallback img {
+            filter: none;
+        }
+    </style>
 </head>
 <body>
-<pre id="ascii">Loading SilverTech...</pre>
-<div class="overlay">
-  <h1>Welcome to SilverTech Oregon</h1>
-  <p>This site is powered by <strong>SilverTech</strong>.</p>
-</div>
-<canvas id="src" style="display:none"></canvas>
 
-<script>
-const img = new Image();
-img.src = 'logo.png';
-const canvas = document.getElementById('src');
-const ctx = canvas.getContext('2d', { willReadFrequently: true });
-const pre = document.getElementById('ascii');
+    <!-- Main container for the ASCII animation -->
+    <pre id="ascii-art"></pre>
 
-const chars = " .:-=+*#%@";
-let w = 160;
-let h = 80;
-let frame = 0;
+    <!-- Overlay text content -->
+    <div class="overlay-text">
+        <p>Welcome to SilverTech Oregon</p>
+        <p class="subtitle">This site is powered by SilverTech.</p>
+    </div>
+    
+    <!-- Color scheme toggle button -->
+    <button id="color-toggle">Invert Colors</button>
 
-img.onload = () => {
-  const ratio = img.height / img.width;
-  h = Math.round(w * ratio * 0.5);
-  canvas.width = w;
-  canvas.height = h;
-  drawLoop();
-};
+    <!-- Fallback content for when JavaScript is disabled -->
+    <noscript>
+        <div class="no-js-fallback">
+            <img src="logo.png" alt="SilverTech Logo">
+            <div class="overlay-text" style="position: static; transform: none; margin-top: 2rem;">
+                <p>Welcome to SilverTech Oregon</p>
+                <p class="subtitle">This site is powered by SilverTech.</p>
+                <p class="subtitle" style="margin-top: 2rem;">Please enable JavaScript for the full experience.</p>
+            </div>
+        </div>
+    </noscript>
 
-function drawLoop() {
-  frame++;
-  ctx.clearRect(0,0,w,h);
-  ctx.drawImage(img, 0, 0, w, h);
-  const data = ctx.getImageData(0, 0, w, h).data;
-  let ascii = '';
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const brightness = (data[i] + data[i+1] + data[i+2]) / 3 / 255;
-      const wave = 0.5 + 0.5 * Math.sin((x + y + frame/3) * 0.2);
-      const flicker = brightness * (0.8 + 0.2 * Math.sin(frame/10 + x/5));
-      const index = Math.floor((brightness * wave + flicker * 0.3) * (chars.length - 1));
-      ascii += chars[Math.max(0, Math.min(chars.length - 1, index))];
-    }
-    ascii += '\n';
-  }
-  pre.textContent = ascii;
-  requestAnimationFrame(drawLoop);
-}
-</script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Section: DOM Element References ---
+            const asciiContainer = document.getElementById('ascii-art');
+            const colorToggleButton = document.getElementById('color-toggle');
+            
+            if (!asciiContainer) return; // Exit if main element is not found
+
+            // --- Section: Constants & Configuration ---
+
+            /**
+             * The path to the logo image. Must be in the same directory.
+             * @type {string}
+             */
+            const IMAGE_PATH = 'logo.png';
+
+            /**
+             * The character set used for rendering, from darkest (transparent) to brightest.
+             * The first character is a space, crucial for creating empty areas.
+             * @type {string}
+             */
+            const ASCII_CHARS = ' `.-:;!l1tfi*I%&8#@';
+
+            /**
+             * The desired frame rate for the animation. The animation loop will try to match this.
+             * @type {number}
+             */
+            const TARGET_FPS = 30;
+            const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
+            /**
+             * The aspect ratio of a single character in the chosen monospace font.
+             * This is used to correct the image distortion when converting from rectangular pixels
+             * to roughly square characters. (width / height)
+             * @type {number}
+             */
+            const CHAR_ASPECT_RATIO = 0.5;
+
+            /**
+             * Maximum number of characters for the width of the ASCII art.
+             * A lower number improves performance but reduces detail.
+             * @type {number}
+             */
+            const MAX_WIDTH_CHARS = 180;
+            
+            /**
+             * Animation speed/frequency for the wave/shimmer effect. Higher is faster.
+             * @type {number}
+             */
+            const ANIMATION_SPEED = 0.05;
+
+            /**
+             * Amplitude of the wave/shimmer effect. Higher is a more intense distortion.
+             * @type {number}
+             */
+            const ANIMATION_AMPLITUDE = 30;
+
+
+            // --- Section: State Variables ---
+
+            let lastFrameTime = 0;
+            let time = 0; // A counter that increments each frame to drive animations.
+            let image, canvas, context;
+            let imageWidth, imageHeight;
+            
+            
+            // --- Section: Core Logic ---
+
+            /**
+             * Initializes the image, canvas, and starts the animation loop.
+             */
+            function init() {
+                canvas = document.createElement('canvas');
+                context = canvas.getContext('2d', { willReadFrequently: true });
+                
+                image = new Image();
+                image.src = IMAGE_PATH;
+                
+                image.onload = () => {
+                    imageWidth = image.width;
+                    imageHeight = image.height;
+                    
+                    // Initial render
+                    handleResize();
+                    
+                    // Start the animation loop using requestAnimationFrame
+                    requestAnimationFrame(animate);
+                };
+                
+                image.onerror = () => {
+                    asciiContainer.textContent = `Error: Could not load image from "${IMAGE_PATH}"`;
+                };
+
+                // Add event listeners
+                window.addEventListener('resize', handleResize);
+                colorToggleButton.addEventListener('click', () => {
+                    document.body.classList.toggle('light-mode');
+                });
+            }
+            
+            /**
+             * Handles window resizing by recalculating dimensions and font size.
+             */
+            function handleResize() {
+                // Calculate the number of columns based on window width and a max limit
+                const containerWidth = window.innerWidth;
+                const columns = Math.min(MAX_WIDTH_CHARS, Math.floor(containerWidth / (window.devicePixelRatio * 4)));
+
+                // Calculate rows to maintain image aspect ratio, adjusted for character aspect ratio
+                const rows = Math.floor((columns * imageHeight / imageWidth) * CHAR_ASPECT_RATIO);
+                
+                // Adjust canvas size for pixel data sampling
+                if (canvas.width !== columns || canvas.height !== rows) {
+                    canvas.width = columns;
+                    canvas.height = rows;
+                }
+
+                // Adjust font size of the <pre> element to fill the screen width
+                const fontSize = (containerWidth / columns) * 0.95; // 0.95 gives a little padding
+                asciiContainer.style.fontSize = `${fontSize}px`;
+            }
+
+            /**
+             * Generates a single frame of ASCII art.
+             * @returns {string} The complete ASCII string for the current frame.
+             */
+            function generateAsciiFrame() {
+                const cols = canvas.width;
+                const rows = canvas.height;
+
+                // Draw the image to the canvas, scaling it down. This is the sampling step.
+                context.drawImage(image, 0, 0, cols, rows);
+                
+                // Get the pixel data from the canvas
+                const imageData = context.getImageData(0, 0, cols, rows).data;
+                
+                let asciiString = '';
+                
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        const offset = (y * cols + x) * 4;
+                        const r = imageData[offset];
+                        const g = imageData[offset + 1];
+                        const b = imageData[offset + 2];
+                        
+                        // Calculate pixel brightness (simple average)
+                        const brightness = (r + g + b) / 3;
+
+                        // --- Animation Behavior ---
+                        // Apply a sine wave based on row and time to create a shimmering/warping effect
+                        const wave = Math.sin(y * 0.3 + time) * ANIMATION_AMPLITUDE;
+                        const animatedBrightness = Math.max(0, Math.min(255, brightness + wave));
+                        
+                        // Map brightness to a character in our ASCII set
+                        const charIndex = Math.floor((animatedBrightness / 255) * (ASCII_CHARS.length - 1));
+                        asciiString += ASCII_CHARS[charIndex];
+                    }
+                    asciiString += '\n'; // New line after each row
+                }
+                
+                return asciiString;
+            }
+
+            /**
+             * The main animation loop, controlled by requestAnimationFrame.
+             * @param {number} timestamp - The current time provided by the browser.
+             */
+            function animate(timestamp) {
+                // Request the next frame immediately
+                requestAnimationFrame(animate);
+
+                // Throttle the animation to the target FPS
+                const elapsed = timestamp - lastFrameTime;
+                if (elapsed < FRAME_INTERVAL) {
+                    return;
+                }
+                lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+
+                // Update animation state
+                time += ANIMATION_SPEED;
+                
+                // Generate and display the new ASCII frame
+                const frame = generateAsciiFrame();
+                asciiContainer.textContent = frame;
+            }
+
+            // --- Section: Execution ---
+            init();
+        });
+    </script>
 </body>
 </html>
