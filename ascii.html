@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SilverTech ASCII</title>
+<style>
+  :root { --fg:#00ff88; --fg2:#bdfcb5; --bg:#000; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  .wrap { display:grid; place-items:center; min-height:100vh; padding:24px; box-sizing:border-box; }
+  pre { line-height: 0.78; font-size: 10px; margin:0; text-shadow: 0 0 6px rgba(0,255,136,0.35); }
+  .caption { margin-top:18px; text-align:center; color:var(--fg2); }
+  .caption h1 { margin:0 0 6px 0; font-size: 22px; color:var(--fg); }
+  .caption p { margin:0; font-size:14px; }
+  .hud { position:fixed; inset:auto 12px 12px auto; color:#7cffc9; font-size:12px; opacity:0.75 }
+  .hud button { background:#022; color:#7cffc9; border:1px solid #094; padding:4px 8px; border-radius:6px; cursor:pointer }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <pre id="ascii">Loading ASCII…</pre>
+  <div class="caption">
+    <h1>Welcome to SilverTech Oregon</h1>
+    <p>This site is powered by <strong>SilverTech</strong>.</p>
+  </div>
+</div>
+
+<div class="hud">
+  <button id="invertBtn">Invert</button>
+</div>
+
+<canvas id="src" style="display:none"></canvas>
+<script>
+/* ====== CONFIG ====== */
+const IMG_SRC = 'logo.png';          // put your logo in the repo as logo.png
+const MAX_WIDTH_CHARS = 140;         // ASCII width (characters)
+const CHARSET = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+const FPS = 30;
+const SHIMMER_AMPLITUDE = 0.15;      // 0–0.4 looks nice
+const NOISE = 0.07;                  // 0–0.2 gentle grain
+
+/* ====== ELEMENTS ====== */
+const asciiEl = document.getElementById('ascii');
+const srcCanvas = document.getElementById('src');
+const sctx = srcCanvas.getContext('2d', { willReadFrequently:true });
+
+let invert = false;
+document.getElementById('invertBtn').onclick = () => {
+  invert = !invert;
+  document.documentElement.style.setProperty('--bg', invert ? '#fff' : '#000');
+  document.documentElement.style.setProperty('--fg', invert ? '#005f3a' : '#00ff88');
+  document.documentElement.style.setProperty('--fg2', invert ? '#0a7c5d' : '#bdfcb5');
+};
+
+const img = new Image();
+img.src = IMG_SRC;
+img.onload = () => start(img);
+img.onerror = () => asciiEl.textContent = "Couldn't load logo.png — upload it to the repo root.";
+
+/* ====== RENDER LOOP ====== */
+function start(image){
+  // scale canvas to desired character width while keeping aspect
+  const ratio = image.height / image.width;
+  const charW = MAX_WIDTH_CHARS;
+  const charH = Math.round(charW * ratio * 0.5); // 0.5-ish because characters are taller than wide
+  srcCanvas.width = charW;
+  srcCanvas.height = charH;
+
+  let t = 0;
+  const step = () => {
+    t += 1/FPS;
+
+    // draw the image scaled to our ASCII resolution
+    sctx.clearRect(0,0,charW,charH);
+    sctx.drawImage(image, 0, 0, charW, charH);
+
+    // shimmer/scanline effect: vertical brightness wave + noise
+    const imgData = sctx.getImageData(0,0,charW,charH);
+    const data = imgData.data;
+
+    let out = "";
+    for(let y=0; y<charH; y++){
+      // scanline wave
+      const wave = 1 + SHIMMER_AMPLITUDE * Math.sin((y/3)+(t*2.2));
+      for(let x=0; x<charW; x++){
+        const i = (y*charW + x)*4;
+        const r = data[i], g = data[i+1], b = data[i+2];
+        // luminance
+        let lum = (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+        // add subtle grain
+        lum += (Math.random()*2-1)*NOISE;
+        lum = Math.min(1, Math.max(0, lum)) * wave;
+        if(invert) lum = 1 - lum;
+
+        // map to charset
+        const idx = Math.min(CHARSET.length-1, Math.max(0, Math.floor(lum*(CHARSET.length-1))));
+        out += CHARSET[idx];
+      }
+      out += "\n";
+    }
+    asciiEl.textContent = out;
+    setTimeout(()=>requestAnimationFrame(step), 1000/FPS);
+  };
+  step();
+}
+</script>
+</body>
+</html>
