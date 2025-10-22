@@ -1,344 +1,157 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SilverTech Oregon</title>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shader Background + Grain</title>
     <style>
-        /* --- Base Styles & Variables --- */
-        :root {
-            --bg-color: #000000;
-            --fg-color: #00ff88;
-            --glow-color: rgba(0, 255, 136, 0.4);
-            --overlay-text-color: #ffffff;
-            --button-bg: rgba(255, 255, 255, 0.1);
-            --button-border: #00ff88;
-            --button-text: #00ff88;
-        }
+      html, body { height: 100%; margin: 0; background: #0a0d12; }
+      #bg { position: fixed; inset: 0; }
+      /* Grain overlay */
+      .grain {
+        pointer-events: none;
+        position: fixed; inset: 0;
+        mix-blend-mode: overlay;   /* or soft-light */
+        opacity: .15;
+        filter: contrast(110%);
+        background-image: url('data:image/svg+xml;utf8,\
+<svg xmlns="http://www.w3.org/2000/svg" width=\\"160\\" height=\\"160\\">\
+<filter id=\\"n\\">\
+  <feTurbulence type=\\"fractalNoise\\" baseFrequency=\\"0.9\\" numOctaves=\\"1\\"/>\
+  <feColorMatrix type=\\"saturate\\" values=\\"0\\"/>\
+</filter>\
+<rect width=\\"100%\\" height=\\"100%\\" filter=\\"url(%23n)\\"/>\
+</svg>');
+        background-size: 160px 160px;
+      }
 
-        body.light-mode {
-            --bg-color: #eeeeee;
-            --fg-color: #003318;
-            --glow-color: rgba(0, 51, 24, 0.2);
-            --overlay-text-color: #000000;
-            --button-bg: rgba(0, 0, 0, 0.1);
-            --button-border: #003318;
-            --button-text: #003318;
-        }
-
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: var(--bg-color);
-            color: var(--fg-color);
-            font-family: 'monospace', 'Courier New', Courier;
-        }
-
-        /* --- ASCII Art Container --- */
-        #ascii-art {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100vw;
-            height: auto;
-            text-align: center;
-            line-height: 0.9; /* Adjust for more square-like character aspect ratio */
-            white-space: pre;
-            font-weight: bold;
-            text-shadow: 
-                0 0 3px var(--fg-color), 
-                0 0 6px var(--fg-color), 
-                0 0 12px var(--glow-color);
-            transition: color 0.3s, text-shadow 0.3s;
-        }
-        
-        /* --- Centered Overlay Text --- */
-        .overlay-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: var(--overlay-text-color);
-            font-size: clamp(1.5rem, 4vw, 2.5rem);
-            font-weight: bold;
-            text-shadow: 0 0 10px var(--bg-color), 0 0 20px var(--bg-color);
-            pointer-events: none; /* Allows clicks to pass through */
-            z-index: 10;
-            transition: color 0.3s, text-shadow 0.3s;
-        }
-
-        .overlay-text p {
-            margin: 0.2em 0;
-        }
-
-        .overlay-text .subtitle {
-            font-size: 0.6em;
-            opacity: 0.8;
-        }
-        
-        /* --- Color Invert Toggle Button (Stretch Goal) --- */
-        #color-toggle {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            padding: 8px 12px;
-            background-color: var(--button-bg);
-            border: 1px solid var(--button-border);
-            color: var(--button-text);
-            font-family: 'monospace', 'Courier New', Courier;
-            cursor: pointer;
-            z-index: 100;
-            border-radius: 4px;
-            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
-        }
-
-        #color-toggle:hover {
-            background-color: var(--button-border);
-            color: var(--bg-color);
-        }
-
-        /* --- No-JS Fallback (Stretch Goal) --- */
-        .no-js-fallback {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
-            text-align: center;
-        }
-
-        .no-js-fallback img {
-            max-width: 80%;
-            max-height: 50vh;
-            filter: invert(1) brightness(0.8) sepia(1) hue-rotate(90deg) saturate(1000%);
-        }
-        
-        .light-mode .no-js-fallback img {
-            filter: none;
-        }
+      /* Optional: center your login card so it “pops” over the motion */
+      .card {
+        position: relative; z-index: 2; 
+        width: 360px; margin: 10vh auto; padding: 24px;
+        background: rgba(15,18,24,.6); backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,.08); border-radius: 16px;
+        color: #e7ecf3; font: 16px/1.5 system-ui, sans-serif;
+      }
+      .brand { font-weight: 700; font-size: 20px; letter-spacing: .02em; }
+      label { display:block; margin-top:12px; font-size:14px; color:#b8c2cc; }
+      input, button { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3340; background:#12161d; color:#e7ecf3; }
+      button { margin-top:12px; border:1px solid #3d4a5c; cursor:pointer; }
+      button:hover { border-color:#55657c; }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <canvas id="bg"></canvas>
+    <div class="grain"></div>
 
-    <!-- Main container for the ASCII animation -->
-    <pre id="ascii-art"></pre>
-
-    <!-- Overlay text content -->
-    <div class="overlay-text">
-        <p>Welcome to SilverTech Oregon</p>
-        <p class="subtitle">This site is powered by SilverTech.</p>
+    <div class="card">
+      <div class="brand">Your Product</div>
+      <label>Email</label><input type="email" />
+      <label>Password</label><input type="password" />
+      <button>Log in</button>
     </div>
-    
-    <!-- Color scheme toggle button -->
-    <button id="color-toggle">Invert Colors</button>
 
-    <!-- Fallback content for when JavaScript is disabled -->
-    <noscript>
-        <div class="no-js-fallback">
-            <img src="logo.png" alt="SilverTech Logo">
-            <div class="overlay-text" style="position: static; transform: none; margin-top: 2rem;">
-                <p>Welcome to SilverTech Oregon</p>
-                <p class="subtitle">This site is powered by SilverTech.</p>
-                <p class="subtitle" style="margin-top: 2rem;">Please enable JavaScript for the full experience.</p>
-            </div>
-        </div>
-    </noscript>
+    <script type="module">
+      import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+      const canvas = document.getElementById('bg');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      const scene = new THREE.Scene();
+      const camera = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- Section: DOM Element References ---
-            const asciiContainer = document.getElementById('ascii-art');
-            const colorToggleButton = document.getElementById('color-toggle');
-            
-            if (!asciiContainer) return; // Exit if main element is not found
+      const vert = /* glsl */`
+        precision highp float;
+        attribute vec2 position;
+        varying vec2 vUv;
+        void main() {
+          vUv = (position + 1.0) * 0.5;
+          gl_Position = vec4(position, 0.0, 1.0);
+        }
+      `;
 
-            // --- Section: Constants & Configuration ---
+      const frag = /* glsl */`
+        precision highp float;
+        uniform vec2  u_res;
+        uniform float u_time;
+        varying vec2  vUv;
 
-            /**
-             * The path to the logo image. Must be in the same directory.
-             * @type {string}
-             */
-            const IMAGE_PATH = 'logo.png';
+        // 2D noise (iq’s hash/rot), quick and good enough for BGs
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(41.0, 289.0)))*43758.5453); }
+        float noise(vec2 p){
+          vec2 i=floor(p), f=fract(p);
+          float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.));
+          vec2 u=f*f*(3.-2.*f);
+          return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+        }
+        // Fractal Brownian Motion
+        float fbm(vec2 p){
+          float v=0., a=.5; 
+          for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.0; a*=.5; }
+          return v;
+        }
 
-            /**
-             * The character set used for rendering, from darkest (transparent) to brightest.
-             * The first character is a space, crucial for creating empty areas.
-             * @type {string}
-             */
-            const ASCII_CHARS = ' `.-:;!l1tfi*I%&8#@';
+        void main(){
+          vec2 uv = vUv;
+          // Base dark gradient (subtle vignette)
+          vec3 base = mix(vec3(0.05,0.07,0.10), vec3(0.01,0.02,0.04), uv.y);
 
-            /**
-             * The desired frame rate for the animation. The animation loop will try to match this.
-             * @type {number}
-             */
-            const TARGET_FPS = 30;
-            const FRAME_INTERVAL = 1000 / TARGET_FPS;
+          // Animate coordinates to create a slow “flow”
+          float t = u_time * 0.06;
+          vec2 p = uv * 3.0;
+          // slight drift & swirl
+          p += vec2(sin(t*0.7)*0.2, cos(t*0.6)*0.2);
+          float n = fbm(p + fbm(p + t));
 
-            /**
-             * The aspect ratio of a single character in the chosen monospace font.
-             * This is used to correct the image distortion when converting from rectangular pixels
-             * to roughly square characters. (width / height)
-             * @type {number}
-             */
-            const CHAR_ASPECT_RATIO = 0.5;
+          // Colorize the noise: teal–magenta gamut (tweak to taste)
+          vec3 c1 = vec3(0.05, 0.71, 0.78);
+          vec3 c2 = vec3(0.78, 0.21, 0.66);
+          vec3 glow = mix(c1, c2, smoothstep(0.2, 0.9, n));
 
-            /**
-             * Maximum number of characters for the width of the ASCII art.
-             * A lower number improves performance but reduces detail.
-             * @type {number}
-             */
-            const MAX_WIDTH_CHARS = 180;
-            
-            /**
-             * Animation speed/frequency for the wave/shimmer effect. Higher is faster.
-             * @type {number}
-             */
-            const ANIMATION_SPEED = 0.05;
+          // Blend the glow softly over the base
+          vec3 col = base + glow * 0.25;
 
-            /**
-             * Amplitude of the wave/shimmer effect. Higher is a more intense distortion.
-             * @type {number}
-             */
-            const ANIMATION_AMPLITUDE = 30;
+          // Soft vignette
+          float d = distance(uv, vec2(0.5));
+          col *= smoothstep(0.95, 0.45, d);
 
+          // Slight contrast lift
+          col = pow(col, vec3(0.95));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `;
 
-            // --- Section: State Variables ---
+      // Fullscreen quad
+      const geometry = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        -1,-1,  1,-1, -1, 1,
+         1,-1,  1, 1, -1, 1
+      ]);
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 2));
 
-            let lastFrameTime = 0;
-            let time = 0; // A counter that increments each frame to drive animations.
-            let image, canvas, context;
-            let imageWidth, imageHeight;
-            
-            
-            // --- Section: Core Logic ---
+      const material = new THREE.RawShaderMaterial({
+        vertexShader: vert, fragmentShader: frag,
+        uniforms: {
+          u_res:  { value: new THREE.Vector2() },
+          u_time: { value: 0 }
+        }
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
 
-            /**
-             * Initializes the image, canvas, and starts the animation loop.
-             */
-            function init() {
-                canvas = document.createElement('canvas');
-                context = canvas.getContext('2d', { willReadFrequently: true });
-                
-                image = new Image();
-                image.src = IMAGE_PATH;
-                
-                image.onload = () => {
-                    imageWidth = image.width;
-                    imageHeight = image.height;
-                    
-                    // Initial render
-                    handleResize();
-                    
-                    // Start the animation loop using requestAnimationFrame
-                    requestAnimationFrame(animate);
-                };
-                
-                image.onerror = () => {
-                    asciiContainer.textContent = `Error: Could not load image from "${IMAGE_PATH}"`;
-                };
+      function resize(){
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(window.innerWidth, window.innerHeight, false);
+        material.uniforms.u_res.value.set(renderer.domElement.width, renderer.domElement.height);
+      }
+      window.addEventListener('resize', resize);
+      resize();
 
-                // Add event listeners
-                window.addEventListener('resize', handleResize);
-                colorToggleButton.addEventListener('click', () => {
-                    document.body.classList.toggle('light-mode');
-                });
-            }
-            
-            /**
-             * Handles window resizing by recalculating dimensions and font size.
-             */
-            function handleResize() {
-                // Calculate the number of columns based on window width and a max limit
-                const containerWidth = window.innerWidth;
-                const columns = Math.min(MAX_WIDTH_CHARS, Math.floor(containerWidth / (window.devicePixelRatio * 4)));
-
-                // Calculate rows to maintain image aspect ratio, adjusted for character aspect ratio
-                const rows = Math.floor((columns * imageHeight / imageWidth) * CHAR_ASPECT_RATIO);
-                
-                // Adjust canvas size for pixel data sampling
-                if (canvas.width !== columns || canvas.height !== rows) {
-                    canvas.width = columns;
-                    canvas.height = rows;
-                }
-
-                // Adjust font size of the <pre> element to fill the screen width
-                const fontSize = (containerWidth / columns) * 0.95; // 0.95 gives a little padding
-                asciiContainer.style.fontSize = `${fontSize}px`;
-            }
-
-            /**
-             * Generates a single frame of ASCII art.
-             * @returns {string} The complete ASCII string for the current frame.
-             */
-            function generateAsciiFrame() {
-                const cols = canvas.width;
-                const rows = canvas.height;
-
-                // Draw the image to the canvas, scaling it down. This is the sampling step.
-                context.drawImage(image, 0, 0, cols, rows);
-                
-                // Get the pixel data from the canvas
-                const imageData = context.getImageData(0, 0, cols, rows).data;
-                
-                let asciiString = '';
-                
-                for (let y = 0; y < rows; y++) {
-                    for (let x = 0; x < cols; x++) {
-                        const offset = (y * cols + x) * 4;
-                        const r = imageData[offset];
-                        const g = imageData[offset + 1];
-                        const b = imageData[offset + 2];
-                        
-                        // Calculate pixel brightness (simple average)
-                        const brightness = (r + g + b) / 3;
-
-                        // --- Animation Behavior ---
-                        // Apply a sine wave based on row and time to create a shimmering/warping effect
-                        const wave = Math.sin(y * 0.3 + time) * ANIMATION_AMPLITUDE;
-                        const animatedBrightness = Math.max(0, Math.min(255, brightness + wave));
-                        
-                        // Map brightness to a character in our ASCII set
-                        const charIndex = Math.floor((animatedBrightness / 255) * (ASCII_CHARS.length - 1));
-                        asciiString += ASCII_CHARS[charIndex];
-                    }
-                    asciiString += '\n'; // New line after each row
-                }
-                
-                return asciiString;
-            }
-
-            /**
-             * The main animation loop, controlled by requestAnimationFrame.
-             * @param {number} timestamp - The current time provided by the browser.
-             */
-            function animate(timestamp) {
-                // Request the next frame immediately
-                requestAnimationFrame(animate);
-
-                // Throttle the animation to the target FPS
-                const elapsed = timestamp - lastFrameTime;
-                if (elapsed < FRAME_INTERVAL) {
-                    return;
-                }
-                lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
-
-                // Update animation state
-                time += ANIMATION_SPEED;
-                
-                // Generate and display the new ASCII frame
-                const frame = generateAsciiFrame();
-                asciiContainer.textContent = frame;
-            }
-
-            // --- Section: Execution ---
-            init();
-        });
+      let t0 = performance.now();
+      (function loop(){
+        material.uniforms.u_time.value = (performance.now() - t0) / 1000;
+        renderer.render(scene, camera);
+        requestAnimationFrame(loop);
+      })();
     </script>
-</body>
+  </body>
 </html>
