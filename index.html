@@ -1,157 +1,449 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Shader Background + Grain</title>
-    <style>
-      html, body { height: 100%; margin: 0; background: #0a0d12; }
-      #bg { position: fixed; inset: 0; }
-      /* Grain overlay */
-      .grain {
-        pointer-events: none;
-        position: fixed; inset: 0;
-        mix-blend-mode: overlay;   /* or soft-light */
-        opacity: .15;
-        filter: contrast(110%);
-        background-image: url('data:image/svg+xml;utf8,\
-<svg xmlns="http://www.w3.org/2000/svg" width=\\"160\\" height=\\"160\\">\
-<filter id=\\"n\\">\
-  <feTurbulence type=\\"fractalNoise\\" baseFrequency=\\"0.9\\" numOctaves=\\"1\\"/>\
-  <feColorMatrix type=\\"saturate\\" values=\\"0\\"/>\
-</filter>\
-<rect width=\\"100%\\" height=\\"100%\\" filter=\\"url(%23n)\\"/>\
-</svg>');
-        background-size: 160px 160px;
-      }
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SilverTech Oregon</title>
 
-      /* Optional: center your login card so it “pops” over the motion */
-      .card {
-        position: relative; z-index: 2; 
-        width: 360px; margin: 10vh auto; padding: 24px;
-        background: rgba(15,18,24,.6); backdrop-filter: blur(8px);
-        border: 1px solid rgba(255,255,255,.08); border-radius: 16px;
-        color: #e7ecf3; font: 16px/1.5 system-ui, sans-serif;
-      }
-      .brand { font-weight: 700; font-size: 20px; letter-spacing: .02em; }
-      label { display:block; margin-top:12px; font-size:14px; color:#b8c2cc; }
-      input, button { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3340; background:#12161d; color:#e7ecf3; }
-      button { margin-top:12px; border:1px solid #3d4a5c; cursor:pointer; }
-      button:hover { border-color:#55657c; }
-    </style>
-  </head>
-  <body>
-    <canvas id="bg"></canvas>
-    <div class="grain"></div>
+  <!-- Libraries (CDN; ok for GitHub Pages) -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 
-    <div class="card">
-      <div class="brand">Your Product</div>
-      <label>Email</label><input type="email" />
-      <label>Password</label><input type="password" />
-      <button>Log in</button>
+  <style>
+    :root{
+      --royal-blue:#0d3c78;          /* deep blue like your sample */
+      --silver:#cfd3da;               /* base silver */
+      --silver-strong:#e6eaef;        /* bright silver for highlights */
+    }
+    html,body{
+      height:100%; margin:0; background:var(--royal-blue); overflow:hidden;
+      font-family: Verdana, Arial, sans-serif;
+      color:var(--silver-strong);
+    }
+    /* p5 canvas lives behind UI overlays */
+    #defaultCanvas0{ position:fixed; inset:0; display:block; }
+
+    /* Typewriter “SILVER TECH” (overlay so it stays crisp) */
+    .type-wrap{
+      position:fixed; left:50%; top:62%; transform:translateX(-50%);
+      font-size: clamp(18px, 3.3vw, 42px);
+      font-weight:bold; letter-spacing:.12em; white-space:nowrap;
+      opacity:0; filter: drop-shadow(0 0 10px rgba(230,234,239,.9));
+      pointer-events:none; /* ignore taps; canvas handles them */
+    }
+    .caret{
+      display:inline-block; width:.6ch; margin-left:.12em;
+      border-right: 2px solid var(--silver-strong);
+      animation: blink 1s step-end infinite;
+      vertical-align:-.08em;
+    }
+    @keyframes blink{ 50%{ border-right-color: transparent; } }
+
+    /* “Tap the logo” helper (appears once) */
+    .tap-hint{
+      position:fixed; left:50%; top:75%; transform:translateX(-50%);
+      font-size: clamp(12px, 1.8vw, 16px); opacity:0; color:#eef3ffb0;
+      text-shadow:0 0 8px rgba(255,255,255,.35);
+      pointer-events:none;
+    }
+
+    /* LinkTree panel (same page) */
+    .links{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:var(--royal-blue);         /* stays deep blue per your choice */
+      opacity:0; pointer-events:none;       /* becomes visible after intro */
+      transition:opacity .8s ease;
+    }
+    .links.show{ opacity:1; pointer-events:auto; }
+    .panel{
+      width:min(720px, 90vw); padding:24px 20px 28px;
+      background: linear-gradient(#0f4487,#0d3c78);
+      border:2px solid #9fb2cc; box-shadow: inset 0 0 0 1px #c5d2e7, 0 10px 40px rgba(0,0,0,.35);
+      border-radius:8px; color:#fff;
+      text-align:center;
+    }
+    .panel h1{ margin:0 0 6px; font-size:clamp(18px,3.5vw,28px); letter-spacing:.08em; }
+    .panel p { margin:0 0 18px; color:#e6edf9; font-size:clamp(12px,2.2vw,15px); }
+    .btnbar{ display:grid; gap:12px; grid-template-columns:1fr; }
+    .btn{
+      display:block; padding:12px 16px; text-decoration:none; color:#10233f; font-weight:bold;
+      background:linear-gradient(#f3f6fb,#cfd9ea);
+      border:2px outset #c6d2e4; border-radius:6px; text-shadow:0 1px 0 #fff;
+      box-shadow: inset 0 0 0 1px #eef3ff, 0 2px 0 #2a4d85;
+    }
+    .btn:active{ border-style: inset; transform: translateY(1px); }
+
+    /* Subtle page fade when we switch to links */
+    .page-fade{ position:fixed; inset:0; background:#0000; pointer-events:none; transition:background .6s ease; }
+    .page-fade.on{ background:#0008; }
+  </style>
+</head>
+<body>
+
+  <!-- Type-in text overlay -->
+  <div id="typewrap" class="type-wrap"><span id="typed"></span><span class="caret"></span></div>
+  <div id="taphint" class="tap-hint">Tap the logo to enter</div>
+
+  <!-- LinkTree panel (revealed after intro) -->
+  <div id="links" class="links" aria-hidden="true">
+    <div class="panel">
+      <h1>SILVER TECH</h1>
+      <p>Welcome — quick links (placeholders for now):</p>
+      <div class="btnbar">
+        <a class="btn" href="#" target="_blank" rel="noopener">Facebook</a>
+        <a class="btn" href="#" target="_blank" rel="noopener">YouTube</a>
+        <a class="btn" href="#" target="_blank" rel="noopener">Classes</a>
+        <a class="btn" href="#" target="_blank" rel="noopener">Contact</a>
+      </div>
     </div>
+  </div>
 
-    <script type="module">
-      import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
-      const canvas = document.getElementById('bg');
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-      const scene = new THREE.Scene();
-      const camera = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+  <div id="fade" class="page-fade"></div>
 
-      const vert = /* glsl */`
-        precision highp float;
-        attribute vec2 position;
-        varying vec2 vUv;
-        void main() {
-          vUv = (position + 1.0) * 0.5;
-          gl_Position = vec4(position, 0.0, 1.0);
+  <script>
+    /* ========= CONFIG ========= */
+    const ASCII_URL_PRIMARY = "assets/ascii-art (1).txt";   // your uploaded file
+    const ASCII_URL_FALLBACK = "assets/ascii-art.txt";      // backup if you rename later
+    const INTRO_LENGTH_MS = 10000;   // ~10s of rainfall before reveal starts
+    const WIPE_TIME_MS    = 3500;    // waterfall wipe duration
+    const TYPE_TEXT       = "SILVER TECH";
+    const TYPE_TIME_MS    = 4500;    // slow cinematic typing
+    const GLOW_MAX        = 22;      // strong halo glow
+    const BASE_FONT       = "Courier New, monospace";
+
+    /* ========= GLOBAL STATE ========= */
+    let asciiGrid = [];    // lines from file (strings)
+    let logoChars = [];    // per-character particles once revealed
+    let gridCols = 0, gridRows = 0;
+    let cellW = 12, cellH = 16;      // will auto-scale
+    let marginTop, marginLeft;
+    let phase = "rain";    // rain -> wipe -> solid -> type -> waitTap -> fall -> links
+    let startMs, wipeStartMs;
+    let revealRowIdx = -1;
+    let rainCols = [];
+    let typedIndex = 0;
+    let typingStarted = false;
+    let ripple = null;
+    let readyForTap = false;
+
+    /* ========= HELPERS ========= */
+    const $ = sel => document.querySelector(sel);
+    function fetchAscii(url){
+      return fetch(encodeURI(url)).then(r => r.ok ? r.text() : Promise.reject());
+    }
+    function loadAscii(){
+      return fetchAscii(ASCII_URL_PRIMARY)
+        .catch(_ => fetchAscii(ASCII_URL_FALLBACK))
+        .then(text => {
+          // keep trailing spaces for alignment; split by lines
+          asciiGrid = text.replace(/\r/g,"").split("\n");
+          // trim empty leading/trailing lines
+          while(asciiGrid.length && asciiGrid[0].trim()==="") asciiGrid.shift();
+          while(asciiGrid.length && asciiGrid.at(-1).trim()==="") asciiGrid.pop();
+          gridRows = asciiGrid.length;
+          gridCols = Math.max(...asciiGrid.map(l => l.length));
+        });
+    }
+
+    /* ========= P5 SKETCH ========= */
+    let pg; // offscreen buffer for crisp text / glow
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      textFont(BASE_FONT);
+      textAlign(LEFT, TOP);
+      pixelDensity(2);
+
+      pg = createGraphics(windowWidth, windowHeight);
+      pg.pixelDensity(2);
+      pg.textFont(BASE_FONT);
+      pg.textAlign(LEFT, TOP);
+
+      startMs = millis();
+
+      // prepare rain columns
+      const approxCharW = textWidth("M") * 0.75;
+      const colW = Math.max(10, approxCharW);
+      const numCols = Math.ceil(width / colW);
+      for(let i=0;i<numCols;i++){
+        rainCols.push({
+          x: i*colW + colW*0.5,
+          y: random(-height, 0),
+          speed: random(2.0, 5.0),
+          gap: Math.floor(random(18, 26))
+        });
+      }
+
+      // load ASCII art then calculate scaling
+      loadAscii().then(() => {
+        calcGridMetrics();
+      });
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      if(pg){ pg.resizeCanvas(windowWidth, windowHeight); }
+      calcGridMetrics();
+    }
+
+    function calcGridMetrics(){
+      if(!gridRows) return;
+      // target max width uses 80% of viewport
+      const targetW = width * 0.8;
+      const targetH = height * 0.55;
+
+      // estimate monospace cell ratio
+      const testSize = 28;
+      textSize(testSize);
+      const monoW = textWidth("M");
+      const ratio = monoW / testSize; // px per font unit
+
+      // pick font size that fits both width and height
+      const sizeByW = targetW / (gridCols * ratio);
+      const sizeByH = targetH / (gridRows * 1.2);
+      const fontSize = Math.max(10, Math.min(sizeByW, sizeByH));
+
+      cellW = fontSize * ratio;
+      cellH = fontSize * 1.2;
+
+      marginLeft = (width - gridCols*cellW)/2;
+      marginTop  = (height*0.32 - gridRows*cellH/2); // place logo slightly above center
+
+      textSize(fontSize);
+      pg.textSize(fontSize);
+    }
+
+    function draw(){
+      background("#0d3c78"); // deep royal blue
+
+      // 1) Code rain in background
+      drawRain();
+
+      // guard if ASCII not yet loaded
+      if(!gridRows){ return; }
+
+      // 2) Phases
+      const now = millis();
+      if(phase==="rain" && now - startMs > INTRO_LENGTH_MS){
+        phase = "wipe";
+        wipeStartMs = now;
+        revealRowIdx = -1;
+      }
+
+      if(phase==="wipe"){
+        const t = constrain((now - wipeStartMs) / WIPE_TIME_MS, 0, 1);
+        // rows revealed increases with easing
+        const ease = t<.5 ? (2*t*t) : (-1+(4-2*t)*t); // easeInOutQuad
+        const rowsToShow = Math.floor(ease * gridRows);
+        while(revealRowIdx < rowsToShow){
+          revealRowIdx++;
+          revealRow(revealRowIdx);
         }
-      `;
-
-      const frag = /* glsl */`
-        precision highp float;
-        uniform vec2  u_res;
-        uniform float u_time;
-        varying vec2  vUv;
-
-        // 2D noise (iq’s hash/rot), quick and good enough for BGs
-        float hash(vec2 p){ return fract(sin(dot(p, vec2(41.0, 289.0)))*43758.5453); }
-        float noise(vec2 p){
-          vec2 i=floor(p), f=fract(p);
-          float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.));
-          vec2 u=f*f*(3.-2.*f);
-          return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+        drawLogo();
+        if(t>=1){
+          phase = "solid";
+          // kick a nice glow tween
+          gsap.to(glowState, {blur:GLOW_MAX, duration:1.4, ease:"power2.out"});
+          // start type-in after slight delay
+          setTimeout(beginTyping, 400);
         }
-        // Fractal Brownian Motion
-        float fbm(vec2 p){
-          float v=0., a=.5; 
-          for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.0; a*=.5; }
-          return v;
+        // draw waterfall wipe indicator (subtle bright bar)
+        drawWipeBar(rowsToShow);
+      }
+      else if(phase==="solid" || phase==="type" || phase==="waitTap"){
+        drawLogo(true);
+      }
+      else if(phase==="fall"){
+        drawFalling();
+      }
+
+      // ripple overlay if any
+      drawRipple();
+
+      // typewriter overlay text managed outside canvas
+    }
+
+    /* ---------- Rain ---------- */
+    function drawRain(){
+      noStroke();
+      fill(225, 232, 242, 180);
+      textSize(16);
+      for(const c of rainCols){
+        // draw a vertical string of random ASCII
+        for(let i=-1;i<height/c.gap+2;i++){
+          const y = c.y + i*c.gap;
+          if(y< -10 || y>height+10) continue;
+          const ch = randomAscii();
+          const alpha = 180 - (i*10);
+          push();
+          fill(207, 211, 218, constrain(alpha, 20, 200));
+          text(ch, c.x, y);
+          pop();
         }
+        c.y += c.speed;
+        if(c.y > c.gap){ c.y = 0; c.speed = random(2.0, 5.0); }
+      }
+    }
+    function randomAscii(){
+      const pool = " @#%&*+=-:.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+      return pool.charAt(Math.floor(Math.random()*pool.length));
+    }
 
-        void main(){
-          vec2 uv = vUv;
-          // Base dark gradient (subtle vignette)
-          vec3 base = mix(vec3(0.05,0.07,0.10), vec3(0.01,0.02,0.04), uv.y);
-
-          // Animate coordinates to create a slow “flow”
-          float t = u_time * 0.06;
-          vec2 p = uv * 3.0;
-          // slight drift & swirl
-          p += vec2(sin(t*0.7)*0.2, cos(t*0.6)*0.2);
-          float n = fbm(p + fbm(p + t));
-
-          // Colorize the noise: teal–magenta gamut (tweak to taste)
-          vec3 c1 = vec3(0.05, 0.71, 0.78);
-          vec3 c2 = vec3(0.78, 0.21, 0.66);
-          vec3 glow = mix(c1, c2, smoothstep(0.2, 0.9, n));
-
-          // Blend the glow softly over the base
-          vec3 col = base + glow * 0.25;
-
-          // Soft vignette
-          float d = distance(uv, vec2(0.5));
-          col *= smoothstep(0.95, 0.45, d);
-
-          // Slight contrast lift
-          col = pow(col, vec3(0.95));
-          gl_FragColor = vec4(col, 1.0);
-        }
-      `;
-
-      // Fullscreen quad
-      const geometry = new THREE.BufferGeometry();
-      const vertices = new Float32Array([
-        -1,-1,  1,-1, -1, 1,
-         1,-1,  1, 1, -1, 1
-      ]);
-      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 2));
-
-      const material = new THREE.RawShaderMaterial({
-        vertexShader: vert, fragmentShader: frag,
-        uniforms: {
-          u_res:  { value: new THREE.Vector2() },
-          u_time: { value: 0 }
+    /* ---------- Logo Characters ---------- */
+    const glowState = { blur: 0 };
+    function revealRow(r){
+      if(r<0 || r>=gridRows) return;
+      const line = asciiGrid[r].padEnd(gridCols, " ");
+      for(let c=0; c<gridCols; c++){
+        const ch = line[c];
+        if(ch===" ") continue;
+        const x = marginLeft + c*cellW;
+        const y = marginTop + r*cellH;
+        // create a char particle
+        logoChars.push({
+          ch, x, y,
+          alpha: 0, // fade in during wipe
+          falling: false,
+          vy: 0,
+          rot: 0
+        });
+      }
+      // fade-in newly added row
+      logoChars.forEach(obj=>{
+        if(obj.y===marginTop + r*cellH){
+          gsap.to(obj, {alpha:1, duration:0.5, ease:"power1.out"});
         }
       });
-      const mesh = new THREE.Mesh(geometry, material);
-      scene.add(mesh);
+    }
 
-      function resize(){
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        renderer.setPixelRatio(dpr);
-        renderer.setSize(window.innerWidth, window.innerHeight, false);
-        material.uniforms.u_res.value.set(renderer.domElement.width, renderer.domElement.height);
+    function drawLogo(glow=false){
+      const ctx = drawingContext;
+      if(glow){
+        ctx.shadowColor = "rgba(230,234,239,0.95)";
+        ctx.shadowBlur = glowState.blur;
+      }else{
+        ctx.shadowBlur = 0;
       }
-      window.addEventListener('resize', resize);
-      resize();
+      noStroke();
+      fill(230,234,239); // strong silver
+      for(const obj of logoChars){
+        if(obj.alpha<=0) continue;
+        push();
+        translate(obj.x, obj.y);
+        rotate(obj.rot || 0);
+        fill( lerpColor(color("#cfd3da"), color("#e6eaef"), obj.alpha).levels );
+        text(obj.ch, 0, 0);
+        pop();
+      }
+      // reset shadow after drawing
+      drawingContext.shadowBlur = 0;
+    }
 
-      let t0 = performance.now();
-      (function loop(){
-        material.uniforms.u_time.value = (performance.now() - t0) / 1000;
-        renderer.render(scene, camera);
-        requestAnimationFrame(loop);
-      })();
-    </script>
-  </body>
+    function drawWipeBar(rows){
+      // subtle bright line showing the revealing wave
+      const y = marginTop + rows*cellH;
+      noStroke();
+      const gradH = Math.max(8, cellH*0.6);
+      for(let i=0;i<gradH;i++){
+        const a = map(i, 0, gradH, 120, 0);
+        fill(230,234,239, a);
+        rect(0, y + i - gradH/2, width, 1);
+      }
+    }
+
+    /* ---------- Typewriter ---------- */
+    function beginTyping(){
+      if(typingStarted) return;
+      typingStarted = true;
+      phase = "type";
+      const $wrap = $("#typewrap");
+      const $typed = $("#typed");
+      $wrap.style.opacity = 1;
+
+      // center text under the logo using our computed grid
+      const baseY = marginTop + gridRows*cellH + cellH*1.2;
+      $wrap.style.top = Math.min(window.innerHeight - 60, baseY) + "px";
+
+      // GSAP ticker to type characters
+      typedIndex = 0;
+      const step = Math.max(1, Math.floor(TYPE_TIME_MS / (TYPE_TEXT.length||1)));
+      const timer = setInterval(()=>{
+        $typed.textContent = TYPE_TEXT.slice(0, ++typedIndex);
+        if(typedIndex >= TYPE_TEXT.length){
+          clearInterval(timer);
+          phase = "waitTap";
+          gsap.to("#taphint", { autoAlpha:1, duration:1.2, delay:.6, ease:"power2.out" });
+          readyForTap = true;
+        }
+      }, step);
+    }
+
+    /* ---------- Tap / Ripple / Fall ---------- */
+    function mousePressed(){
+      if(!readyForTap) return;
+      readyForTap = false;
+      document.body.style.cursor = "default";
+      // ripple
+      ripple = { x: mouseX, y: mouseY, r: 0, a: 1 };
+      gsap.to(ripple, { r: Math.max(width,height)*1.1, a:0, duration:.7, ease:"power2.out" });
+
+      // start fall
+      gsap.to("#typewrap", { autoAlpha:0, duration:.4 });
+      gsap.to("#taphint", { autoAlpha:0, duration:.2 });
+      phase = "fall";
+      // give all chars velocities
+      for(const obj of logoChars){
+        obj.falling = true;
+        obj.vy = random(2.5, 7.5);
+        obj.rot = 0;
+        gsap.to(obj, {
+          rot: random(-0.6, 0.6),
+          duration: random(0.6, 1.2),
+          ease:"sine.inOut",
+          repeat: -1, yoyo:true
+        });
+      }
+
+      // after a short beat, fade canvas and show links
+      setTimeout(()=>{
+        $("#fade").classList.add("on");
+        setTimeout(()=>{
+          $("#links").classList.add("show");
+          // keep canvas behind
+        }, 200);
+      }, 500);
+    }
+
+    function drawFalling(){
+      // gravity-like motion
+      for(const obj of logoChars){
+        if(!obj.falling) continue;
+        obj.y += obj.vy;
+        obj.vy += 0.12; // acceleration
+        obj.alpha = Math.max(0, obj.alpha - 0.006); // fade as they fall
+      }
+      drawLogo(true);
+    }
+
+    function drawRipple(){
+      if(!ripple) return;
+      noFill();
+      stroke(230,234,239, ripple.a*255);
+      strokeWeight(3);
+      circle(ripple.x, ripple.y, ripple.r*2);
+      if(ripple.a <= 0.02) ripple = null;
+    }
+
+    /* Make cursor “tap-ready” once type finished */
+    const tapCursor = `
+      url('data:image/svg+xml;utf8,\
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">\
+        <circle cx="16" cy="16" r="6" fill="white"/>\
+      </svg>') 16 16, pointer`;
+    const observer = new MutationObserver(()=>{
+      if(phase==="waitTap"){ document.body.style.cursor = tapCursor; }
+    });
+    observer.observe(document.body, { attributes:true, childList:true, subtree:true });
+
+  </script>
+</body>
 </html>
