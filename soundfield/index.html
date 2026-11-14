@@ -93,6 +93,9 @@ input[type=range]{accent-color:var(--accent);width:90px}
 .map{position:relative;height:58px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);cursor:pointer}
 .map canvas{position:absolute;inset:0;width:100%;height:100%}
 .map .head{position:absolute;top:0;bottom:0;width:2px;background:var(--fg);box-shadow:0 0 6px var(--fg);left:0;pointer-events:none}
+.map .clear{position:absolute;right:6px;top:6px;z-index:2;font:500 11px var(--f-mono);color:var(--muted);background:rgba(7,9,14,.8);border:1px solid var(--line);border-radius:6px;padding:3px 7px;cursor:pointer}
+.map .clear:hover{color:var(--fg)}
+.map .tag{position:absolute;left:8px;top:6px;z-index:2;font:500 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:rgba(7,9,14,.7);border-radius:5px;padding:2px 6px;pointer-events:none}
 .map .hint{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12.5px;pointer-events:none;text-align:center;padding:0 10px}
 .time{font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted);min-width:11ch;text-align:right}
 #play{min-width:84px;justify-content:center}
@@ -185,10 +188,14 @@ input[type=range]{accent-color:var(--accent);width:90px}
         <button class="tab" role="tab" data-mode="cymatics" aria-selected="false">Cymatics</button>
         <button class="tab" role="tab" data-mode="tunnel" aria-selected="false">Tunnel</button>
         <button class="tab" role="tab" data-mode="ridges" aria-selected="false">Ridges</button>
+        <button class="tab" role="tab" data-mode="spectrum" aria-selected="false">Spectrum</button>
+        <button class="tab" role="tab" data-mode="helix" aria-selected="false">Pitch helix</button>
+        <button class="tab" role="tab" data-mode="phase" aria-selected="false">Phase space</button>
+        <button class="tab" role="tab" data-mode="ripple" aria-selected="false">Ripple tank</button>
       </div>
       <video id="video" hidden playsinline></video>
       <div class="stage-foot">
-        <div class="caption" id="caption"><b></b><p></p><div class="kbd">Space play · R record · 1–5 views · F full screen</div></div>
+        <div class="caption" id="caption"><b></b><p></p><div class="kbd">Space play · R record · 1–9 views · F full screen</div></div>
         <button class="btn" id="tune" type="button" aria-expanded="false" aria-controls="ctrls">⚙ Look</button>
         <div class="controls" id="ctrls">
           <label for="sens">Gain <input type="range" id="sens" min="0.4" max="2.5" step="0.05" value="1"></label>
@@ -235,6 +242,7 @@ input[type=range]{accent-color:var(--accent);width:90px}
     <div class="transport">
       <button class="btn" id="play" type="button" disabled>Play</button>
       <div class="map" id="map"><canvas id="overview"></canvas><div class="head" id="head"></div>
+        <span class="tag" id="mapTag" hidden>History</span><button class="clear" id="clearHist" type="button" hidden>Clear</button>
         <div class="hint" id="mapHint">Sound map of the whole recording appears here. Click it to jump anywhere.</div></div>
       <div class="time" id="time">0:00 / 0:00</div>
       <div class="rec">
@@ -259,6 +267,7 @@ input[type=range]{accent-color:var(--accent);width:90px}
 'use strict';
 const $ = s => document.querySelector(s);
 const NB = 160, FMIN = 30, FMAX = 16000;
+const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isPhone = matchMedia('(max-width:760px), (pointer:coarse) and (max-width:1024px)').matches;
 
@@ -301,6 +310,7 @@ function ensureCtx(){
   aL=ctx.createAnalyser(); aR=ctx.createAnalyser(); aL.fftSize=aR.fftSize=1024;
   monitor=ctx.createGain(); recDest=ctx.createMediaStreamDestination();
   inputBus.connect(analyser); analyser.connect(monitor); monitor.connect(ctx.destination); inputBus.connect(recDest);
+  setupHistory();
   inputBus.connect(split); split.connect(aL,0); split.connect(aR,1);
   freqByte=new Uint8Array(analyser.frequencyBinCount); freqFloat=new Float32Array(analyser.frequencyBinCount);
   timeData=new Float32Array(2048); timeL=new Float32Array(1024); timeR=new Float32Array(1024);
@@ -314,7 +324,7 @@ function ensureCtx(){
 
 /* ---------- demo: generative dawn chorus over a pulse ---------- */
 function startDemo(){
-  ensureCtx(); stopMedia(); if(media) media.hidden=true; ctx.resume(); monitor.gain.value=1;
+  ensureCtx(); endReplay(false); stopMedia(); if(media) media.hidden=true; ctx.resume(); monitor.gain.value=1;
   const bus=ctx.createGain(); bus.gain.value=0.8; bus.connect(inputBus);
   const pad=[];
   [55,82.5,110,164.8].forEach((f,i)=>{
@@ -348,11 +358,11 @@ function startDemo(){
   demo={bus,pad,timer,startedAt:ctx.currentTime};
   source='demo'; setStatus('live','Demo · dawn chorus'); $('#play').disabled=false; $('#play').textContent='Pause';
   $('#demoIc').textContent='■'; $('#demoLbl').textContent='Stop';
-  drawOverviewEmpty('The demo plays live, so there is no full map. Open a file to get one.');
+  drawOverviewEmpty('Everything you hear is kept here as it plays. Tap any point later to replay it.');
 }
 function stopDemo(){
   if(!demo) return; clearInterval(demo.timer); demo.pad.forEach(o=>{try{o.stop()}catch(e){}}); demo.bus.disconnect(); demo=null;
-  $('#demoIc').textContent='▶'; $('#demoLbl').textContent='Demo'; if(source==='demo'){source='idle'; setStatus('idle','Preview signal'); $('#play').disabled=true; $('#play').textContent='Play';}
+  $('#demoIc').textContent='▶'; $('#demoLbl').textContent='Demo'; if(source==='demo'){source='idle'; setStatus('idle','Preview signal'); $('#play').disabled=!hist.len; $('#play').textContent=hist.len?'Replay':'Play'; histDirty=true;}
 }
 
 /* ---------- files ---------- */
@@ -364,7 +374,7 @@ function stopMedia(){
 function stopLive(){
   if(!live) return; live.node.disconnect(); live.stream.getTracks().forEach(t=>t.stop());
   const k=live.kind; live=null; monitor.gain.value=1; $('#'+k).classList.remove('on');
-  if(source==='live'){source='idle'; setStatus('idle','Preview signal'); $('#play').disabled=true; $('#play').textContent='Play';}
+  if(source==='live'){source='idle'; setStatus('idle','Preview signal'); $('#play').disabled=!hist.len; $('#play').textContent=hist.len?'Replay':'Play'; histDirty=true;}
 }
 async function startLive(kind){
   ensureCtx();
@@ -386,17 +396,17 @@ async function startLive(kind){
     else toast('<b>This browser can’t capture '+(kind==='mic'?'the mic':'system audio')+' here.</b> Chrome or Edge on a computer works best.');
     return;
   }
-  stopDemo(); if(media){ media.pause(); media.hidden=true; } stopLive(); ctx.resume();
+  endReplay(false); stopDemo(); if(media){ media.pause(); media.hidden=true; } stopLive(); ctx.resume();
   const node=ctx.createMediaStreamSource(stream); node.connect(inputBus);
   monitor.gain.value=0; // never play live input back out: avoids feedback and double audio
   live={kind,stream,node,startedAt:ctx.currentTime}; $('#'+kind).classList.add('on');
   stream.getTracks().forEach(t=>t.addEventListener('ended',()=>{ if(live&&live.stream===stream&&!stream.getAudioTracks().some(a=>a.readyState==='live')) stopLive(); }));
   source='live'; setStatus('live',kind==='mic'?'Microphone · live':'System audio · live'); $('#play').disabled=false; $('#play').textContent='Stop';
-  drawOverviewEmpty(kind==='mic'?'Listening to your microphone. Hit Record to save what you see.':'Listening to shared audio. Keep this page visible while recording so the visuals keep moving.');
+  drawOverviewEmpty('Everything you hear is kept here as it plays. Tap any point later to replay it.');
 }
 async function loadFile(file){
   if(!file) return;
-  ensureCtx(); stopDemo(); stopLive(); ctx.resume(); monitor.gain.value=1;
+  ensureCtx(); endReplay(false); stopDemo(); stopLive(); ctx.resume(); monitor.gain.value=1;
   const isVideo=file.type.startsWith('video/') || /\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name);
   const url=URL.createObjectURL(file);
   if(mediaSrc){ try{mediaSrc.disconnect()}catch(e){} }
@@ -454,6 +464,12 @@ async function computeOverview(audio){
   }
   overview={data,COLS,ROWS,duration:audio.duration}; overviewDirty=true; $('#mapHint').hidden=true;
 }
+function renderHistoryMap(){
+  const cv=$('#overview'), g=cv.getContext('2d'), dpr=Math.min(2,devicePixelRatio||1);
+  if(cv.width!==(cv.clientWidth*dpr|0)||cv.height!==(cv.clientHeight*dpr|0)){cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;}
+  g.fillStyle='#0e121a'; g.fillRect(0,0,cv.width,cv.height);
+  if(hist.cols>0){ g.imageSmoothingEnabled=true; g.drawImage(hist.colCanvas,0,0,hist.cols,NB,0,0,cv.width,cv.height); }
+}
 function renderOverview(){
   const cv=$('#overview'), g=cv.getContext('2d'), dpr=Math.min(2,devicePixelRatio||1);
   cv.width=cv.clientWidth*dpr; cv.height=cv.clientHeight*dpr;
@@ -468,20 +484,35 @@ function drawOverviewEmpty(msg){ overview=null; overviewDirty=true; const h=$('#
 
 /* ---------- analysis per frame ---------- */
 let sens=1, t0=performance.now();
-const readout={pitch:0,level:-Infinity,centroid:0};
+const readout={pitch:0,level:-Infinity,centroid:0,peaks:[]};
+let pitchFrame=0; const nsdfBuf=new Float32Array(1024);
 const chroma=new Float32Array(12);
 function analyse(t){
-  const live = source!=='idle' && ctx && !(source==='file' && media && media.paused);
+  const live = source!=='idle' && ctx && !(source==='file' && media && media.paused) && !(source==='replay' && replay && replay.paused);
   if(source!=='idle' && ctx){
     analyser.getByteFrequencyData(freqByte); analyser.getFloatFrequencyData(freqFloat);
     analyser.getFloatTimeDomainData(timeData); aL.getFloatTimeDomainData(timeL); aR.getFloatTimeDomainData(timeR);
     for(let i=0;i<NB;i++){const [b0,b1]=bandMap[i];let m=0;for(let b=b0;b<b1;b++) if(freqByte[b]>m)m=freqByte[b];
       bands[i]=Math.min(1,Math.pow(m/255,1.25)*sens);}
-    // pitch: strongest bin 50 Hz – 5 kHz, parabolic interpolation
-    const sr=ctx.sampleRate, n=analyser.fftSize, lo=Math.floor(50/sr*n), hi=Math.floor(5000/sr*n);
-    let k=lo, mx=-Infinity; for(let b=lo;b<hi;b++) if(freqFloat[b]>mx){mx=freqFloat[b];k=b;}
-    const a=freqFloat[k-1],b=freqFloat[k],c=freqFloat[k+1], d=0.5*(a-c)/(a-2*b+c||1);
-    readout.pitch = mx>-75 ? (k+d)*sr/n : 0;
+    const sr=ctx.sampleRate, n=analyser.fftSize;
+    // spectral peaks (true frequency via parabolic interpolation of the dB spectrum), 40 Hz – 16 kHz
+    { const lo=Math.max(2,Math.floor(40/sr*n)), hi=Math.min(freqFloat.length-2,Math.floor(16000/sr*n)), pk=[];
+      for(let b=lo;b<hi;b++){const v=freqFloat[b]; if(v>-80&&v>freqFloat[b-1]&&v>=freqFloat[b+1]&&v>freqFloat[b-2]&&v>=freqFloat[b+2]){
+        const a=freqFloat[b-1],c=freqFloat[b+1],d=0.5*(a-c)/(a-2*v+c||1); pk.push({f:(b+d)*sr/n,db:v-0.25*(a-c)*d});}}
+      pk.sort((x,y)=>y.db-x.db); const out=[];
+      for(const p of pk){ if(out.every(o=>Math.abs(Math.log2(p.f/o.f))>1/12)) out.push(p); if(out.length>=3) break; }
+      readout.peaks=out; }
+    // fundamental pitch: normalized square-difference (McLeod) on the waveform, 50 Hz – 4 kHz, refreshed every 3rd frame
+    if(++pitchFrame%3===0){
+      const dec=sr>32000?2:1, srd=sr/dec, W=1024, x=nsdfBuf; for(let i=0;i<W;i++) x[i]=timeData[i*dec]||0;
+      const minL=Math.max(2,Math.floor(srd/4000)), maxL=Math.min(W/2,Math.ceil(srd/50)); let best=0,bestL=0, prevPos=false; const vals=new Float32Array(maxL+2);
+      for(let L=minL;L<=maxL+1;L++){let r=0,m=0;for(let i=0;i<W-L;i++){const a=x[i],b=x[i+L];r+=a*b;m+=a*a+b*b;} vals[L]=m>0?2*r/m:0;}
+      let mx=0; for(let L=minL;L<=maxL;L++) if(vals[L]>mx) mx=vals[L];
+      for(let L=minL+1;L<=maxL;L++){ if(vals[L]>0) prevPos=true; if(prevPos&&vals[L]>=0.9*mx&&vals[L]>vals[L-1]&&vals[L]>=vals[L+1]){best=vals[L];bestL=L;break;} }
+      let rmsP=0; for(let i=0;i<W;i++) rmsP+=x[i]*x[i]; rmsP=Math.sqrt(rmsP/W);
+      if(bestL&&best>0.75&&rmsP>0.003){const a=vals[bestL-1],b=vals[bestL],c=vals[bestL+1],d=0.5*(a-c)/(a-2*b+c||1); readout.pitch=srd/(bestL+d); readout.clarity=best;}
+      else readout.pitch=0;
+    }
     let rms=0; for(let i=0;i<timeData.length;i++) rms+=timeData[i]*timeData[i]; rms=Math.sqrt(rms/timeData.length);
     readout.level=20*Math.log10(rms+1e-9);
     let num=0,den=0; for(let b=1;b<freqByte.length;b++){const m=freqByte[b];num+=m*b;den+=m;} readout.centroid=den>0?num/den*sr/n:0;
@@ -501,7 +532,7 @@ function analyse(t){
     for(let i=0;i<2048;i++) timeData[i]=0.35*Math.sin(i*0.031+s*3)+0.15*Math.sin(i*0.17+s*5)+0.04*(Math.random()-.5);
     for(let i=0;i<1024;i++){timeL[i]=0.4*Math.sin(i*0.05+s*2);timeR[i]=0.4*Math.sin(i*0.05*1.5+s*2.6);}
     for(let i=0;i<12;i++) chroma[i]=0.5+0.4*Math.sin(s*1.5+i*0.9);
-    readout.pitch=0;
+    readout.pitch=0; readout.peaks=[0.18,0.55,0.78].map((x,i)=>({f:FMIN*Math.pow(FMAX/FMIN,x+0.04*Math.sin(s*(0.7+i*0.4))),db:-20-i*8}));
   }
   for(let i=0;i<NB;i++) bandsSmooth[i]+= (bands[i]-bandsSmooth[i])*0.35;
   return live;
@@ -520,12 +551,19 @@ const controls=new THREE.OrbitControls(camera,canvas); controls.enableDamping=tr
 let palTex=new THREE.DataTexture(new Uint8Array(256*4),256,1,THREE.RGBAFormat); palTex.magFilter=palTex.minFilter=THREE.LinearFilter;
 
 const modes={};
+let modeNote='';
+function fmtF(f){return f>=1000?(f/1000).toFixed(f>=10000?1:2)+' kHz':Math.round(f)+' Hz';}
+function noteName(f){const n=Math.round(12*Math.log2(f/440)+69);return NOTES[((n%12)+12)%12]+(Math.floor(n/12)-1);}
 const INFO={
-  terrain:['Spectral terrain','Frequency runs left to right (low to high), time flows toward you, and loudness lifts the ground. Drag to orbit, scroll to zoom.'],
+  terrain:['Spectral terrain','Frequency runs left to right on a log scale (30 Hz to 16 kHz), time flows toward you, and height is level in decibels (−96 to −18 dBFS). Drag to orbit, scroll to zoom.'],
   orb:['Resonant orb','Bass swells the top of the sphere and treble the bottom. The waveform ripples around its waist.'],
-  cymatics:['Cymatics plate','The loudest frequencies set the vibration modes of a square plate. Sand gets kicked off the moving areas and collects on the still nodal lines, like a Chladni plate.'],
+  cymatics:['Cymatics plate','A simulated square steel-like plate, simply supported, whose mode (m,n) rings at 10·(m²+n²) Hz. The three strongest frequencies drive it through a damped resonance (Q 22). Sand is thrown off the moving areas and settles on the still nodal lines, as on a real Chladni plate.'],
   tunnel:['Spectral tunnel','Each ring is one moment of sound with frequency wrapped around the circle. You fly through recent history.'],
   ridges:['Ridgelines','A stack of spectrum slices over the last few seconds, newest at the front.'],
+  spectrum:['Spectrum analyzer','The true FFT magnitude in dBFS (8192-point, Blackman window) on a 20 Hz to 20 kHz log axis. The pale line holds recent peaks, and labels name the three strongest frequencies.'],
+  helix:['Pitch helix','The spectrum wound into a spiral with one turn per octave, from A0 (27.5 Hz) upward. The same note lines up on every turn, so chords and harmonics form vertical patterns.'],
+  phase:['Phase space','The waveform plotted against itself delayed: x(t), x(t+τ), x(t+2τ), with τ a quarter of the pitch period. A pure tone draws a clean loop, harmonics add lobes, and noise becomes a cloud. Auto-scaled to fit.'],
+  ripple:['Ripple tank','The 2D wave equation solved on a grid of water. Two sources, left and right channel, emit waves whose strength follows each channel’s level and whose wavelength follows the pitch. Watch them interfere.'],
 };
 
 // Terrain
@@ -570,53 +608,187 @@ const INFO={
   }};
 })();
 
-// Cymatics
+// Cymatics: a simply supported square plate. Mode (m,n) rings at f = F11*(m²+n²)/2 and responds to a driving
+// frequency with a damped resonance (quality factor Q). Sand is kicked where the plate moves and settles where it is still.
 (()=>{
+  const F11=20, Q=22, MM=20, PER=6, G=3;
   const scene=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,-1,1);
-  const uni={uRes:{value:new THREE.Vector2(1,1)},uN:{value:new THREE.Vector4(2,3,4,5)},uM:{value:new THREE.Vector4(5,4,7,3)},
-    uA:{value:new THREE.Vector4(1,.5,.3,.2)},uPal:{value:palTex},uEnergy:{value:0.3}};
+  const uni={uRes:{value:new THREE.Vector2(1,1)},uModes:{value:Array.from({length:G*PER},()=>new THREE.Vector4())},
+    uS:{value:new THREE.Vector3(1,0,0)},uNorm:{value:1},uPal:{value:palTex}};
   const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.ShaderMaterial({uniforms:uni,depthWrite:false,depthTest:false,
     vertexShader:'void main(){gl_Position=vec4(position.xy,0.,1.);}',
-    fragmentShader:`precision highp float;uniform vec2 uRes;uniform vec4 uN,uM,uA;uniform sampler2D uPal;uniform float uEnergy;
+    fragmentShader:`precision highp float;uniform vec2 uRes;uniform vec4 uModes[${G*PER}];uniform vec3 uS;uniform float uNorm;uniform sampler2D uPal;
       const float PI=3.14159265;
-      float ch(vec2 p,float n,float m){return cos(n*PI*p.x)*cos(m*PI*p.y)-cos(m*PI*p.x)*cos(n*PI*p.y);}
+      float grp(vec2 p,int g){float A=0.,B=0.;for(int j=0;j<${PER};j++){vec4 md=uModes[g*${PER}+j];float ph=sin(md.x*PI*p.x)*sin(md.y*PI*p.y);A+=md.z*ph;B+=md.w*ph;}return A*A+B*B;}
       void main(){vec2 uv=(gl_FragCoord.xy-.5*uRes)/min(uRes.x,uRes.y)*2.2;vec2 p=uv*.5+.5;
-        float v=uA.x*ch(p,uN.x,uM.x)+uA.y*ch(p,uN.y,uM.y)+uA.z*ch(p,uN.z,uM.z)+uA.w*ch(p,uN.w,uM.w);
-        v/=max(.001,uA.x+uA.y+uA.z+uA.w);
+        float I=(uS.x*grp(p,0)+uS.y*grp(p,1)+uS.z*grp(p,2))/uNorm;
+        float amp=sqrt(clamp(I,0.,1.));
         float plate=step(abs(uv.x),1.)*step(abs(uv.y),1.);
-        float node=1.-smoothstep(0.,.07,abs(v));
-        vec3 base=texture2D(uPal,vec2(.12+abs(v)*.25,.5)).rgb*.55;
-        vec3 c=base+texture2D(uPal,vec2(.55+.4*node,.5)).rgb*node*(.12+.25*uEnergy);
-        float edge=smoothstep(1.,.985,max(abs(uv.x),abs(uv.y)));
-        gl_FragColor=vec4(mix(vec3(.02,.025,.035),c*edge,plate),1.);}`}));
+        vec3 c=texture2D(uPal,vec2(.1+amp*.55,.5)).rgb*(.35+.5*amp);
+        gl_FragColor=vec4(mix(vec3(.02,.025,.035),c,plate),1.);}`}));
   scene.add(quad);
-  const P=(reduceMotion||isPhone)?2400:5000, pp=new Float32Array(P*2), ppos=new Float32Array(P*3);
+  const P=(reduceMotion||isPhone)?2600:5500, pp=new Float32Array(P*2), ppos=new Float32Array(P*3);
   for(let i=0;i<P;i++){pp[i*2]=Math.random();pp[i*2+1]=Math.random();}
   const pgeo=new THREE.BufferGeometry(); pgeo.setAttribute('position',new THREE.BufferAttribute(ppos,3));
-  const pmat=new THREE.PointsMaterial({size:1.8,sizeAttenuation:false,color:0xffffff,transparent:true,opacity:0.9,depthTest:false});
+  const pmat=new THREE.PointsMaterial({size:isPhone?2.2:1.8,sizeAttenuation:false,color:0xffffff,transparent:true,opacity:0.92,depthTest:false});
   scene.add(new THREE.Points(pgeo,pmat));
-  const tgt={n:[2,3,4,5],m:[5,4,7,3],a:[1,.5,.3,.2]}, cur={n:[2,3,4,5],m:[5,4,7,3],a:[1,.5,.3,.2]};
-  function V(x,y){let v=0,s=0;for(let k=0;k<4;k++){const n=cur.n[k],m=cur.m[k];
-    v+=cur.a[k]*(Math.cos(n*Math.PI*x)*Math.cos(m*Math.PI*y)-Math.cos(m*Math.PI*x)*Math.cos(n*Math.PI*y));s+=cur.a[k];}return v/Math.max(.001,s);}
-  modes.cymatics={scene,camera:cam,ortho:true,resize(w,h,pr){pr=pr||renderer.getPixelRatio();uni.uRes.value.set(w*pr,h*pr);
+  const drv=[{f:220,s:0},{f:440,s:0},{f:880,s:0}];
+  const MD=new Float32Array(G*PER*4), S=new Float32Array(G);
+  const sx=new Float32Array(MM+2), cx=new Float32Array(MM+2), sy=new Float32Array(MM+2), cy=new Float32Array(MM+2);
+  function trig(v,s,c){const a=Math.PI*v, ca=Math.cos(a); s[0]=0;c[0]=1;s[1]=Math.sin(a);c[1]=ca;for(let k=2;k<=MM;k++){s[k]=2*ca*s[k-1]-s[k-2];c[k]=2*ca*c[k-1]-c[k-2];}}
+  let norm=1;
+  const self={scene,camera:cam,ortho:true,resize(w,h,pr){pr=pr||renderer.getPixelRatio();uni.uRes.value.set(w*pr,h*pr);
       const a=w/h; if(a>=1){cam.left=-1.1*a;cam.right=1.1*a;cam.top=1.1;cam.bottom=-1.1;}else{cam.left=-1.1;cam.right=1.1;cam.top=1.1/a;cam.bottom=-1.1/a;} cam.updateProjectionMatrix();},
     update(){
-      // find the four strongest spectral peaks and turn them into plate modes
-      const peaks=[]; for(let i=2;i<NB-2;i++){const v=bandsSmooth[i]; if(v>0.08&&v>=bandsSmooth[i-1]&&v>=bandsSmooth[i+1]&&v>=bandsSmooth[i-2]&&v>=bandsSmooth[i+2]) peaks.push([v,i]);}
-      peaks.sort((a,b)=>b[0]-a[0]);
-      let energy=0; for(let i=0;i<NB;i++) energy+=bandsSmooth[i]; energy/=NB;
-      for(let k=0;k<4;k++){const pk=peaks[k]; if(pk){const fr=pk[1]/NB; tgt.n[k]=1+fr*11; tgt.m[k]=tgt.n[k]*0.55+1.3+k*0.9; if(Math.abs(tgt.n[k]-tgt.m[k])<0.9) tgt.m[k]+=1.4; tgt.a[k]=pk[0];} else tgt.a[k]*=0.95;}
-      for(let k=0;k<4;k++){cur.n[k]+=(tgt.n[k]-cur.n[k])*0.03;cur.m[k]+=(tgt.m[k]-cur.m[k])*0.03;cur.a[k]+=(tgt.a[k]-cur.a[k])*0.08;}
-      uni.uN.value.set(...cur.n); uni.uM.value.set(...cur.m); uni.uA.value.set(...cur.a.map(a=>a+0.001)); uni.uEnergy.value=Math.min(1,energy*3);
-      const kick=0.004+energy*0.05, e=0.002;
-      for(let i=0;i<P;i++){let x=pp[i*2],y=pp[i*2+1];const v=V(x,y),av=Math.abs(v);
-        const gx=(Math.abs(V(x+e,y))-av)/e, gy=(Math.abs(V(x,y+e))-av)/e;
-        x+=-gx*0.0009+(Math.random()-.5)*kick*av; y+=-gy*0.0009+(Math.random()-.5)*kick*av;
-        if(x<0||x>1||y<0||y>1||Math.random()<0.0008){x=Math.random();y=Math.random();}
+      const pk=readout.peaks;
+      for(let g=0;g<G;g++){const d=drv[g], p=pk[g];
+        if(p){ d.f=Math.exp(Math.log(d.f)+(Math.log(p.f)-Math.log(d.f))*0.25); d.s+=(Math.pow(10,p.db/20)-d.s)*0.2; } else d.s*=0.9; }
+      let smax=1e-6; for(let g=0;g<G;g++) smax=Math.max(smax,drv[g].s);
+      norm=0;
+      for(let g=0;g<G;g++){
+        const f=drv[g].f, best=[];
+        for(let m=1;m<=MM;m++)for(let n=1;n<=MM;n++){const fm=F11*(m*m+n*n)/2, r=f/fm, a=1-r*r, b=r/Q, den=a*a+b*b, re=a/den, im=-b/den, mag=Math.sqrt(re*re+im*im);
+          if(best.length<PER||mag>best[best.length-1][4]){best.push([m,n,re,im,mag]);best.sort((x,y)=>y[4]-x[4]);if(best.length>PER)best.pop();}}
+        let sum=0; for(let j=0;j<PER;j++){const b=best[j],o=(g*PER+j)*4;MD[o]=b[0];MD[o+1]=b[1];MD[o+2]=b[2];MD[o+3]=b[3];sum+=b[4];}
+        S[g]=drv[g].s/smax*(g===0?1:0.85); norm+=S[g]*sum*sum*0.25;
+      }
+      norm=Math.max(norm,1e-6);
+      for(let j=0;j<G*PER;j++) uni.uModes.value[j].set(MD[j*4],MD[j*4+1],MD[j*4+2],MD[j*4+3]);
+      uni.uS.value.set(S[0],S[1],S[2]); uni.uNorm.value=norm;
+      let loud=0; for(let g=0;g<G;g++) loud=Math.max(loud,drv[g].s); loud=Math.min(1,Math.sqrt(loud)*3*sens);
+      for(let i=0;i<P;i++){let x=pp[i*2],y=pp[i*2+1]; trig(x,sx,cx); trig(y,sy,cy);
+        let I=0,gx=0,gy=0;
+        for(let g=0;g<G;g++){ if(S[g]<1e-4) continue; let A=0,B=0,Ax=0,Bx=0,Ay=0,By=0;
+          for(let j=0;j<PER;j++){const o=(g*PER+j)*4,m=MD[o],n=MD[o+1],re=MD[o+2],im=MD[o+3];
+            const ph=sx[m]*sy[n], dx=m*Math.PI*cx[m]*sy[n], dy=n*Math.PI*sx[m]*cy[n];
+            A+=re*ph;B+=im*ph;Ax+=re*dx;Bx+=im*dx;Ay+=re*dy;By+=im*dy;}
+          I+=S[g]*(A*A+B*B); gx+=S[g]*2*(A*Ax+B*Bx); gy+=S[g]*2*(A*Ay+B*By); }
+        I/=norm; gx/=norm; gy/=norm;
+        const amp=Math.sqrt(Math.max(0,Math.min(1,I))), kick=(0.002+0.03*loud)*amp;
+        const dr=0.0005*(0.2+loud)/(1+Math.hypot(gx,gy)*0.02); x+=-gx*dr+(Math.random()-.5)*kick; y+=-gy*dr+(Math.random()-.5)*kick;
+        if(x<0||x>1||y<0||y>1){x=Math.random();y=Math.random();}
         pp[i*2]=x;pp[i*2+1]=y;ppos[i*3]=x*2-1;ppos[i*3+1]=y*2-1;}
       pgeo.attributes.position.needsUpdate=true;
-      const c=LUT.slice(235*3,235*3+3); pmat.color.setRGB(c[0]/255,c[1]/255,c[2]/255);
+      const c=LUT.slice(240*3,240*3+3); pmat.color.setRGB(c[0]/255,c[1]/255,c[2]/255);
+      modeNote=`plate driven at ${fmtF(drv[0].f)}`;
     }};
+  modes.cymatics=self;
+})();
+
+// Spectrum analyzer: true FFT magnitudes in dBFS on a log-frequency axis, with peak hold
+(()=>{
+  const scene=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,-1,1);
+  const cv=document.createElement('canvas'), g=cv.getContext('2d'), tex=new THREE.CanvasTexture(cv); tex.minFilter=THREE.LinearFilter;
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({map:tex,depthTest:false})));
+  const F0=20,F1=20000,DB0=-110,DB1=0; let hold=null, last=performance.now();
+  modes.spectrum={scene,camera:cam,ortho:true,flat:true,resize(){},draw2d(W,H){
+    if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+    const s=Math.min(W,H)/700, padL=56*s, padR=18*s, padT=84*s, padB=44*s, w=W-padL-padR, h=H-padT-padB;
+    const X=f=>padL+Math.log(f/F0)/Math.log(F1/F0)*w, Y=db=>padT+(1-(db-DB0)/(DB1-DB0))*h;
+    g.fillStyle='#05070b'; g.fillRect(0,0,W,H);
+    g.font=`${12*s}px "IBM Plex Mono", monospace`; g.textBaseline='middle';
+    g.strokeStyle='#1d2431'; g.lineWidth=1; g.fillStyle='#8892a3';
+    for(let db=DB1;db>=DB0;db-=12){const y=Y(db);g.beginPath();g.moveTo(padL,y);g.lineTo(W-padR,y);g.stroke();g.textAlign='right';g.fillText(db+'',padL-8*s,y);}
+    g.textAlign='center';
+    [20,50,100,200,500,1000,2000,5000,10000,20000].forEach(f=>{const x=X(f);g.beginPath();g.moveTo(x,padT);g.lineTo(x,padT+h);g.stroke();g.fillText(f>=1000?(f/1000)+'k':f+'',x,padT+h+16*s);});
+    g.textAlign='left'; g.fillText('dBFS',8*s,padT-22*s); g.textAlign='right'; g.fillText('Hz',W-padR,padT+h+34*s);
+    // spectrum line from the analyser's float FFT (or the preview bands)
+    const pts=Math.round(w/1.5), arr=new Float32Array(pts);
+    const have=ctx&&freqFloat&&source!=='idle', sr=ctx?ctx.sampleRate:48000, n=analyser?analyser.fftSize:8192;
+    for(let i=0;i<pts;i++){const f=F0*Math.pow(F1/F0,i/(pts-1)), f2=F0*Math.pow(F1/F0,(i+1)/(pts-1));
+      if(have){let b0=Math.floor(f/sr*n), b1=Math.max(b0+1,Math.floor(f2/sr*n)), m=-200;for(let b=b0;b<b1&&b<freqFloat.length;b++) if(freqFloat[b]>m) m=freqFloat[b]; arr[i]=Math.max(DB0,m+20*Math.log10(sens));}
+      else { const x=Math.log(f/FMIN)/Math.log(FMAX/FMIN); arr[i]=-100+80*bandAt(Math.max(0,Math.min(1,x))); } }
+    const now=performance.now(), dt=(now-last)/1000; last=now;
+    if(!hold||hold.length!==pts) hold=Float32Array.from(arr);
+    for(let i=0;i<pts;i++) hold[i]=Math.max(arr[i],hold[i]-dt*12);
+    const grd=g.createLinearGradient(0,padT,0,padT+h); const c1=LUT.slice(230*3,230*3+3), c0=LUT.slice(90*3,90*3+3);
+    grd.addColorStop(0,`rgba(${c1[0]},${c1[1]},${c1[2]},0.55)`); grd.addColorStop(1,`rgba(${c0[0]},${c0[1]},${c0[2]},0.05)`);
+    g.beginPath(); g.moveTo(padL,Y(DB0)); for(let i=0;i<pts;i++) g.lineTo(padL+i/(pts-1)*w,Y(arr[i])); g.lineTo(padL+w,Y(DB0)); g.closePath(); g.fillStyle=grd; g.fill();
+    g.beginPath(); for(let i=0;i<pts;i++){const x=padL+i/(pts-1)*w,y=Y(arr[i]); i?g.lineTo(x,y):g.moveTo(x,y);} g.strokeStyle=`rgb(${c1[0]},${c1[1]},${c1[2]})`; g.lineWidth=1.6*s; g.stroke();
+    g.beginPath(); for(let i=0;i<pts;i++){const x=padL+i/(pts-1)*w,y=Y(hold[i]); i?g.lineTo(x,y):g.moveTo(x,y);} g.strokeStyle='rgba(231,236,243,0.35)'; g.lineWidth=1*s; g.stroke();
+    // label the strongest peaks with frequency, note and level
+    g.font=`500 ${12*s}px "IBM Plex Mono", monospace`; g.textAlign='center';
+    (readout.peaks||[]).slice(0,3).forEach((p,i)=>{ if(p.f<F0||p.f>F1) return; const x=X(p.f), y=Y(p.db+20*Math.log10(sens));
+      g.fillStyle='#e7ecf3'; g.beginPath(); g.arc(x,y,3*s,0,7); g.fill();
+      g.fillText(`${fmtF(p.f)} ${noteName(p.f)} ${p.db.toFixed(0)}dB`, Math.max(padL+60*s,Math.min(W-padR-60*s,x)), y-(14+i*16)*s); });
+    tex.needsUpdate=true;
+  },update(){ this.draw2d(Math.max(2,stage.clientWidth*renderer.getPixelRatio()|0),Math.max(2,stage.clientHeight*renderer.getPixelRatio()|0)); }};
+})();
+
+// Pitch helix: the spectrum wound into a spiral with one turn per octave, so the same note lines up on every turn
+(()=>{
+  const scene=new THREE.Scene(), F0=27.5, OCT=9, STEPS=12*8*OCT, R0=2.2, PITCH=0.75;
+  const pos=new Float32Array(STEPS*3), colr=new Float32Array(STEPS*3), base=new Float32Array(STEPS*3), freqs=new Float32Array(STEPS);
+  for(let i=0;i<STEPS;i++){const oct=i/(12*8), a=oct*Math.PI*2; freqs[i]=F0*Math.pow(2,oct);
+    base[i*3]=Math.cos(a); base[i*3+1]=(oct-OCT/2)*PITCH; base[i*3+2]=Math.sin(a);}
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('color',new THREE.BufferAttribute(colr,3));
+  scene.add(new THREE.Line(geo,new THREE.LineBasicMaterial({vertexColors:true})));
+  scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:0.09,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})));
+  // twelve spokes, one per pitch class (A at the front)
+  const spk=[]; for(let k=0;k<12;k++){const a=k/12*Math.PI*2; spk.push(Math.cos(a)*R0*0.4,-OCT/2*PITCH,Math.sin(a)*R0*0.4, Math.cos(a)*R0*0.4,OCT/2*PITCH,Math.sin(a)*R0*0.4);}
+  const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.Float32BufferAttribute(spk,3));
+  scene.add(new THREE.LineSegments(sg,new THREE.LineBasicMaterial({color:0x1d2431})));
+  const sm=new Float32Array(STEPS);
+  modes.helix={scene,cam:[0,4.5,9.5],target:[0,0,0],update(){
+    const have=ctx&&freqFloat&&source!=='idle', sr=ctx?ctx.sampleRate:48000, n=analyser?analyser.fftSize:8192;
+    for(let i=0;i<STEPS;i++){const f=freqs[i]; let v;
+      if(have){const b=f/sr*n, b0=Math.floor(b), fr=b-b0, db=(freqFloat[b0]||-140)*(1-fr)+(freqFloat[b0+1]||-140)*fr; v=Math.max(0,Math.min(1,(db+96)/78*sens));}
+      else { const x=Math.log(f/FMIN)/Math.log(FMAX/FMIN); v=bandAt(Math.max(0,Math.min(1,x))); }
+      sm[i]+=(v-sm[i])*0.4; const r=R0+Math.pow(sm[i],1.5)*1.6;
+      pos[i*3]=base[i*3]*r; pos[i*3+1]=base[i*3+1]; pos[i*3+2]=base[i*3+2]*r; col(0.12+sm[i]*1.05,colr,i*3);}
+    geo.attributes.position.needsUpdate=true; geo.attributes.color.needsUpdate=true;
+  }};
+})();
+
+// Phase space: the waveform plotted against delayed copies of itself, x(t), x(t+τ), x(t+2τ)
+(()=>{
+  const scene=new THREE.Scene(), N=1400, TRAILS=6, lines=[];
+  for(let k=0;k<TRAILS;k++){const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3)); geo.setAttribute('color',new THREE.BufferAttribute(new Float32Array(N*3),3));
+    const l=new THREE.Line(geo,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:k?0.5*(1-k/TRAILS):1})); scene.add(l); lines.push(l);}
+  const axes=new THREE.BufferGeometry(); axes.setAttribute('position',new THREE.Float32BufferAttribute([-3,0,0,3,0,0,0,-3,0,0,3,0,0,0,-3,0,0,3],3));
+  scene.add(new THREE.LineSegments(axes,new THREE.LineBasicMaterial({color:0x1d2431})));
+  let frame=0, tau=8, scale=20;
+  modes.phase={scene,cam:[4.5,3.2,6.5],target:[0,0,0],update(){
+    frame++;
+    if(frame%2) { // shift trails back every other frame
+      for(let k=TRAILS-1;k>0;k--){lines[k].geometry.attributes.position.array.set(lines[k-1].geometry.attributes.position.array);lines[k].geometry.attributes.color.array.set(lines[k-1].geometry.attributes.color.array);lines[k].geometry.attributes.position.needsUpdate=lines[k].geometry.attributes.color.needsUpdate=true;}
+    }
+    const sr=ctx?ctx.sampleRate:48000, target=readout.pitch?Math.round(sr/(4*readout.pitch)):8; tau+=(Math.max(2,Math.min(200,target))-tau)*0.2;
+    let pk=1e-4; for(let i=0;i<timeData.length;i++){const a=Math.abs(timeData[i]); if(a>pk) pk=a;} scale+=(Math.min(400,2.4/pk)-scale)*0.1;
+    const T=Math.round(tau), x=timeData, g=lines[0].geometry, p=g.attributes.position.array, c=g.attributes.color.array, k=scale*sens;
+    const len=Math.min(N,x.length-2*T);
+    for(let i=0;i<N;i++){const j=Math.min(i,len-1); p[i*3]=x[j]*k; p[i*3+1]=x[j+T]*k; p[i*3+2]=x[j+2*T]*k; col(0.35+0.6*i/N,c,i*3);}
+    g.attributes.position.needsUpdate=true; g.attributes.color.needsUpdate=true;
+    modeNote=`delay τ = ${(T/sr*1000).toFixed(2)} ms · scaled ×${scale.toFixed(0)}`;
+  }};
+})();
+
+// Ripple tank: the 2D wave equation solved on a grid. Two sources (left and right channel) emit waves whose strength follows
+// each channel's level and whose wavelength follows the detected pitch, scaled to fit the tank.
+(()=>{
+  const N=isPhone?110:150, scene=new THREE.Scene(), SIZE=12;
+  let u=new Float32Array(N*N), u1=new Float32Array(N*N), u2=new Float32Array(N*N);
+  const damp=new Float32Array(N*N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){const e=Math.min(x,y,N-1-x,N-1-y); damp[y*N+x]=e<14?0.86+0.14*(e/14):0.998;}
+  const geo=new THREE.PlaneGeometry(SIZE,SIZE,N-1,N-1); geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position, colr=new Float32Array(N*N*3); geo.setAttribute('color',new THREE.BufferAttribute(colr,3));
+  scene.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide})));
+  const wire=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x000000,wireframe:true,transparent:true,opacity:0.12})); scene.add(wire);
+  const sL=[(N*0.32)|0,(N*0.5)|0], sR=[(N*0.68)|0,(N*0.5)|0]; let ph=0, fsim=0.05;
+  modes.ripple={scene,cam:[0,9,10],target:[0,0,0],update(){
+    let rl=0,rr=0; for(let i=0;i<timeL.length;i++){rl+=timeL[i]*timeL[i];rr+=timeR[i]*timeR[i];} rl=Math.sqrt(rl/timeL.length)*sens; rr=Math.sqrt(rr/timeR.length)*sens;
+    const p=readout.pitch||300, tgt=0.03+0.09*Math.max(0,Math.min(1,Math.log(p/60)/Math.log(4000/60))); fsim+=(tgt-fsim)*0.1;
+    const C2=0.24, STEPS=3;
+    for(let s=0;s<STEPS;s++){
+      ph+=2*Math.PI*fsim; const drive=Math.sin(ph);
+      u[sL[1]*N+sL[0]]+=drive*rl*2.2; u[sR[1]*N+sR[0]]+=drive*rr*2.2;
+      for(let y=1;y<N-1;y++)for(let x=1;x<N-1;x++){const i=y*N+x; const lap=u[i-1]+u[i+1]+u[i-N]+u[i+N]-4*u[i]; u2[i]=(2*u[i]-u1[i]+C2*lap)*damp[i];}
+      const t=u1; u1=u; u=u2; u2=t;
+    }
+    for(let i=0;i<N*N;i++){const v=u[i]; pos.array[i*3+1]=v*2.2; col(0.45+v*1.6,colr,i*3);}
+    pos.needsUpdate=true; geo.attributes.color.needsUpdate=true;
+    modeNote=`wavelength ${(Math.sqrt(C2)/fsim*SIZE/N).toFixed(2)} units`;
+  }};
 })();
 
 // Tunnel
@@ -695,7 +867,7 @@ function drawScope(){
   scg.strokeStyle='#1d2431'; scg.lineWidth=1; scg.beginPath(); scg.moveTo(0,H/2); scg.lineTo(W,H/2); scg.stroke();
   const d=timeData; let s=0; for(let i=1;i<d.length/2;i++){ if(d[i-1]<0&&d[i]>=0){s=i;break;} } // rising-edge trigger
   const N=1024, c=LUT.slice(215*3,215*3+3); scg.strokeStyle=`rgb(${c[0]},${c[1]},${c[2]})`; scg.lineWidth=1.5*(devicePixelRatio>1?1.5:1);
-  scg.beginPath(); for(let i=0;i<N;i++){const x=i/(N-1)*W, y=H/2-d[s+i]*H*0.45*sens; i?scg.lineTo(x,y):scg.moveTo(x,y);} scg.stroke();
+  scg.beginPath(); for(let i=0;i<N;i++){const x=i/(N-1)*W, y=H/2-d[s+i]*H*0.45; i?scg.lineTo(x,y):scg.moveTo(x,y);} scg.stroke();
 }
 function drawVec(){
   if(fit(vec)){vg.fillStyle='#0e121a';vg.fillRect(0,0,vec.width,vec.height);}
@@ -703,9 +875,8 @@ function drawVec(){
   vg.fillStyle='rgba(14,18,26,0.28)'; vg.fillRect(0,0,W,H);
   vg.strokeStyle='#1d2431'; vg.lineWidth=1; vg.beginPath(); vg.moveTo(W/2,H/2-R); vg.lineTo(W/2,H/2+R); vg.moveTo(W/2-R,H/2); vg.lineTo(W/2+R,H/2); vg.stroke();
   const c=LUT.slice(225*3,225*3+3); vg.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; const sz=Math.max(1.5,devicePixelRatio);
-  for(let i=0;i<timeL.length;i+=2){const l=timeL[i]*sens,r=timeR[i]*sens; vg.fillRect(W/2+(r-l)*0.707*R*1.4-sz/2, H/2-(l+r)*0.707*R*1.4-sz/2, sz, sz);}
+  for(let i=0;i<timeL.length;i+=2){const l=timeL[i],r=timeR[i]; vg.fillRect(W/2+(r-l)*0.707*R*1.4-sz/2, H/2-(l+r)*0.707*R*1.4-sz/2, sz, sz);}
 }
-const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 function drawChroma(){
   fit(chr); const W=chr.width,H=chr.height,cx=W/2,cy=H/2,R=Math.min(W,H)*0.46,r0=R*0.34; cg.clearRect(0,0,W,H);
   const dpr=Math.min(2,devicePixelRatio||1); cg.font=`${10*dpr}px "IBM Plex Mono", monospace`; cg.textAlign='center'; cg.textBaseline='middle';
@@ -727,24 +898,95 @@ function updateReadout(t,live){
   $('#rCent').innerHTML=readout.centroid?fmtHz(readout.centroid):'—';
 }
 
+/* ---------- history: keeps everything heard from the mic, system audio or demo so it can be replayed ---------- */
+const H_RATE=24000, H_CHUNK=H_RATE*10, H_MAX_SEC=30*60, COL_SEC=0.25;
+const hist={chunks:[],len:0,cols:0,colCanvas:null,full:false};
+let replay=null, histDirty=false;
+function setupHistory(){
+  const sp=ctx.createScriptProcessor(4096,2,1), mute=ctx.createGain(); mute.gain.value=0;
+  const step=Math.max(1,Math.round(ctx.sampleRate/H_RATE));
+  sp.onaudioprocess=e=>{
+    if(!(source==='live'||(source==='demo'&&ctx.state==='running'))||hist.full) return;
+    const a=e.inputBuffer.getChannelData(0), b=e.inputBuffer.numberOfChannels>1?e.inputBuffer.getChannelData(1):a;
+    for(let i=0;i<a.length;i+=step){
+      const ci=(hist.len/H_CHUNK)|0, off=hist.len%H_CHUNK;
+      if(!hist.chunks[ci]) hist.chunks[ci]=new Int16Array(H_CHUNK);
+      const v=Math.max(-1,Math.min(1,(a[i]+b[i])*0.5)); hist.chunks[ci][off]=v*32767; hist.len++;
+      if(hist.len>=H_MAX_SEC*H_RATE){ hist.full=true; toast('<b>History is full (30 min).</b> Clear it to keep recording history.'); break; }
+    }
+  };
+  inputBus.connect(sp); sp.connect(mute); mute.connect(ctx.destination);
+  hist.colCanvas=document.createElement('canvas'); hist.colCanvas.width=Math.ceil(H_MAX_SEC/COL_SEC); hist.colCanvas.height=NB;
+}
+function histSec(){ return hist.len/H_RATE; }
+function addHistoryColumns(){ // one column of the history map per quarter second of captured sound
+  if(!hist.colCanvas) return;
+  const want=Math.floor(histSec()/COL_SEC); if(want<=hist.cols) return;
+  const g=hist.colCanvas.getContext('2d'), img=g.createImageData(1,NB);
+  for(let r=0;r<NB;r++){const i=(Math.min(1,bandsSmooth[NB-1-r]*1.1)*255)|0,p=r*4;img.data[p]=LUT[i*3];img.data[p+1]=LUT[i*3+1];img.data[p+2]=LUT[i*3+2];img.data[p+3]=255;}
+  while(hist.cols<want){ g.putImageData(img,hist.cols,0); hist.cols++; }
+  histDirty=true;
+}
+function readHist(startSample,n){
+  const out=new Float32Array(n);
+  for(let i=0;i<n;i++){const k=startSample+i, c=hist.chunks[(k/H_CHUNK)|0]; out[i]=c?c[k%H_CHUNK]/32767:0;}
+  return out;
+}
+function stopReplaySource(){ if(replay&&replay.node){ replay.node.onended=null; try{replay.node.stop()}catch(e){} replay.node.disconnect(); replay.node=null; } }
+function playReplaySegment(fromSec){
+  const total=histSec(); if(fromSec>=total-0.05){ endReplay(true); return; }
+  const len=Math.min(20,total-fromSec), n=Math.floor(len*H_RATE), s0=Math.floor(fromSec*H_RATE);
+  const buf=ctx.createBuffer(1,n,H_RATE); buf.copyToChannel(readHist(s0,n),0);
+  const node=ctx.createBufferSource(); node.buffer=buf; node.connect(inputBus);
+  const at=ctx.currentTime+0.02; node.start(at);
+  replay.node=node; replay.segStart=fromSec; replay.segAt=at; replay.segLen=len;
+  node.onended=()=>{ if(replay&&replay.node===node&&!replay.paused) playReplaySegment(fromSec+len); };
+}
+function replayPos(){ if(!replay) return 0; if(replay.paused||!replay.node) return replay.pos; return Math.min(histSec(),replay.segStart+Math.max(0,ctx.currentTime-replay.segAt)); }
+function startReplay(sec){
+  if(!hist.len) return;
+  ensureCtx(); ctx.resume();
+  if(source==='live') stopLive(); if(demo) stopDemo(); if(media){ media.pause(); media.hidden=true; }
+  stopReplaySource();
+  replay={pos:sec,paused:false}; monitor.gain.value=1; source='replay';
+  setStatus('live','Replaying history'); $('#play').disabled=false; $('#play').textContent='Pause';
+  playReplaySegment(sec);
+}
+function pauseReplay(){ if(!replay) return; replay.pos=replayPos(); replay.paused=true; stopReplaySource(); $('#play').textContent='Play'; }
+function resumeReplay(){ if(!replay) return; replay.paused=false; ctx.resume(); playReplaySegment(replay.pos); $('#play').textContent='Pause'; }
+function endReplay(reachedEnd){
+  stopReplaySource(); replay=null; if(source==='replay'){ source='idle'; setStatus('idle',reachedEnd?'End of history':'Preview signal'); $('#play').disabled=!hist.len; $('#play').textContent=hist.len?'Replay':'Play'; }
+}
+function clearHistory(){ endReplay(false); hist.chunks=[]; hist.len=0; hist.cols=0; hist.full=false;
+  if(hist.colCanvas) hist.colCanvas.getContext('2d').clearRect(0,0,hist.colCanvas.width,hist.colCanvas.height); histDirty=true; toast('History cleared.',3000); }
+function mapShowsHistory(){ return source!=='file' && hist.len>0; }
+
 /* ---------- transport ---------- */
 function fmtT(s){if(!isFinite(s))s=0;const m=Math.floor(s/60),x=Math.floor(s%60);return m+':'+String(x).padStart(2,'0');}
 function updateTime(){
   let cur=0,dur=0;
   if(source==='file'&&media){cur=media.currentTime;dur=media.duration;}
   else if(source==='demo'&&demo){cur=ctx.currentTime-demo.startedAt;dur=NaN;}
-  else if(source==='live'&&live){cur=ctx.currentTime-live.startedAt;dur=NaN;}
+  else if(source==='replay'){cur=replayPos();dur=histSec();}
+  else if(mapShowsHistory()){cur=histSec();dur=histSec();}
   $('#time').textContent=fmtT(cur)+' / '+(isFinite(dur)?fmtT(dur):'live');
-  $('#head').style.left=(isFinite(dur)&&dur>0?cur/dur*100:0)+'%';
+  $('#head').style.left=(isFinite(dur)&&dur>0?Math.min(1,cur/dur)*100:0)+'%';
 }
 $('#play').addEventListener('click',async()=>{
   if(source==='file'&&media){ if(media.paused){await ctx.resume();await media.play();$('#play').textContent='Pause';} else {media.pause();$('#play').textContent='Play';} }
   else if(source==='live'){ stopLive(); }
+  else if(source==='replay'){ if(replay.paused) resumeReplay(); else pauseReplay(); }
+  else if(source==='idle'&&hist.len){ startReplay(0); }
   else if(source==='demo'){ if(ctx.state==='running'){await ctx.suspend();$('#play').textContent='Play';} else {await ctx.resume();$('#play').textContent='Pause';} }
 });
-function seekFrom(e){ if(source!=='file'||!media||!isFinite(media.duration)) return; const r=$('#map').getBoundingClientRect(); media.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*media.duration; }
+function seekFrom(e){
+  const r=$('#map').getBoundingClientRect(), f=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+  if(source==='file'&&media&&isFinite(media.duration)){ media.currentTime=f*media.duration; return; }
+  if(mapShowsHistory()){ if(replay){ replay.pos=f*histSec(); if(!replay.paused){ stopReplaySource(); playReplaySegment(replay.pos); } } else startReplay(f*histSec()); }
+}
 let dragging=false;
-$('#map').addEventListener('pointerdown',e=>{dragging=true;seekFrom(e);});
+$('#map').addEventListener('pointerdown',e=>{ if(e.target.closest('#clearHist')) return; dragging=true;seekFrom(e);});
+$('#clearHist').addEventListener('click',clearHistory);
 addEventListener('pointermove',e=>{if(dragging)seekFrom(e);}); addEventListener('pointerup',()=>dragging=false);
 $('#demo').addEventListener('click',()=>{ if(demo) stopDemo(); else startDemo(); });
 $('#mic').addEventListener('click',()=>startLive('mic'));
@@ -791,17 +1033,20 @@ function stopRecording(){ if(!rec) return; const r=rec; rec=null; r.mr.stop(); r
   $('#recBtn').classList.remove('recording'); $('#recLabel').textContent='Record'; $('#recFmt').disabled=false; }
 function renderRecordingFrame(M){
   const {r2,cam2,og,W,H,glc}=rec;
-  if(M.ortho){ modes.cymatics.resize(W,H,1); r2.render(M.scene,M.camera); modes.cymatics.resize(stage.clientWidth,stage.clientHeight); }
+  if(M.draw2d){ M.draw2d(W,H); r2.render(M.scene,M.camera); }
+  else if(M.ortho){ M.resize(W,H,1); r2.render(M.scene,M.camera); M.resize(stage.clientWidth,stage.clientHeight); }
   else { cam2.position.copy(camera.position); cam2.quaternion.copy(camera.quaternion); r2.render(M.scene,cam2); }
   og.drawImage(glc,0,0);
   // sonogram ribbon along the bottom, the same one shown in the side panel
+  if(!M.draw2d){
   const sh=Math.round(H*(H>W?0.12:0.16)), sy=H-sh;
   og.globalAlpha=0.9; og.drawImage(sono,0,0,sono.width,sono.height,0,sy,W,sh); og.globalAlpha=1;
   const grd=og.createLinearGradient(0,sy-30,0,sy); grd.addColorStop(0,'rgba(5,7,11,0)'); grd.addColorStop(1,'rgba(5,7,11,0.85)'); og.fillStyle=grd; og.fillRect(0,sy-30,W,30);
+  }
   const fs=Math.round(Math.min(W,H)*0.024); og.font=`600 ${fs}px "Bricolage Grotesque", system-ui, sans-serif`; og.fillStyle='rgba(231,236,243,0.92)'; og.textBaseline='top';
   og.fillText('Soundfield',fs,fs);
   og.font=`500 ${Math.round(fs*0.62)}px "IBM Plex Mono", monospace`; og.fillStyle='rgba(231,236,243,0.65)';
-  const note=readout.pitch?`${Math.round(readout.pitch)} Hz`:''; og.fillText(INFO[mode][0].toUpperCase()+(note?'  ·  '+note:''),fs,fs*2.2);
+  const note=readout.pitch?`${fmtF(readout.pitch)} ${noteName(readout.pitch)}`:''; og.fillText(INFO[mode][0].toUpperCase()+(note?'  ·  '+note:'')+(modeNote?'  ·  '+modeNote:''),fs,fs*2.2);
   const secs=(performance.now()-rec.startedAt)/1000; $('#recLabel').textContent='Stop '+fmtT(secs);
 }
 async function finishRecording(chunks,mime,W,H){
@@ -827,30 +1072,34 @@ if(!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia)) $('#sys').
 $('#tune').addEventListener('click',()=>{const c=$('#ctrls'),o=!c.classList.contains('open');c.classList.toggle('open',o);$('#tune').setAttribute('aria-expanded',String(o));});
 addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('input,select,textarea,button')||e.metaKey||e.ctrlKey||e.altKey) return;
-  const k=e.key.toLowerCase(), list=['terrain','orb','cymatics','tunnel','ridges'];
+  const k=e.key.toLowerCase(), list=['terrain','orb','cymatics','tunnel','ridges','spectrum','helix','phase','ripple'];
   if(k===' '){ e.preventDefault(); if(!$('#play').disabled) $('#play').click(); else startDemo(); }
   else if(k==='r'){ $('#recBtn').click(); }
   else if(k==='f'){ $('#full').click(); }
   else if(k==='m'){ $('#mic').click(); }
-  else if(k>='1'&&k<='5'){ setMode(list[+k-1]); }
+  else if(k>='1'&&k<='9'){ setMode(list[+k-1]); }
 });
 getDownloads();
 
 /* ---------- loop ---------- */
 function resize(){
   const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false);
-  camera.aspect=w/h; camera.updateProjectionMatrix(); modes.cymatics.resize(w,h); overviewDirty=true;
+  camera.aspect=w/h; camera.updateProjectionMatrix(); for(const k in modes) if(modes[k].resize) modes[k].resize(w,h); overviewDirty=true;
 }
 new ResizeObserver(resize).observe(stage);
 new ResizeObserver(()=>overviewDirty=true).observe($('#map'));
 function frame(t){
   const live=analyse(t);
-  const M=modes[mode]; M.update(t);
+  modeNote=''; const M=modes[mode]; M.update(t);
   if(!M.ortho){ controls.autoRotate=$('#spin').checked&&!reduceMotion; controls.autoRotateSpeed=mode==='tunnel'?0.25:0.6; controls.update(); }
   renderer.render(M.scene,M.ortho?M.camera:camera);
   drawSono();
   if(rec) renderRecordingFrame(M); drawScope(); drawVec(); drawChroma(); updateReadout(t,live); updateTime();
-  if(overviewDirty){overviewDirty=false;renderOverview();}
+  if(source==='live'||(source==='demo'&&ctx&&ctx.state==='running')) addHistoryColumns();
+  const showHist=mapShowsHistory();
+  $('#mapTag').hidden=!showHist; $('#clearHist').hidden=!showHist||source==='replay';
+  if(showHist){ $('#mapHint').hidden=true; if(histDirty||overviewDirty){histDirty=false;overviewDirty=false;renderHistoryMap();} }
+  else if(overviewDirty){overviewDirty=false;renderOverview(); $('#mapHint').hidden=!!overview;}
   requestAnimationFrame(frame);
 }
 let savedPal='aurora', savedMode='terrain';
@@ -858,7 +1107,7 @@ try{savedPal=localStorage.getItem('sf-pal')||'aurora'; savedMode=localStorage.ge
 if(!PALETTES[savedPal]) savedPal='aurora'; if(!modes[savedMode]) savedMode='terrain';
 $('#pal').value=savedPal; buildLUT(savedPal); buildAxis(); resize(); setMode(savedMode);
 requestAnimationFrame(frame);
-window.__sf={loadFile,setMode,startDemo,startRecording,stopRecording};
+window.__sf={loadFile,setMode,startDemo,startRecording,stopRecording,startReplay,hist:()=>({len:hist.len,cols:hist.cols,source})};
 })();
 </script>
 </body>
